@@ -167,25 +167,65 @@ sudo journalctl -u bilibili -f
 
 ## 环境变量
 
-在项目根目录创建 `.env` 文件：
+在项目根目录创建 `.env` 文件，参考 `.env.example`。
+
+### 必填项
+
+| 变量 | 说明 | 示例值 |
+|------|------|--------|
+| `DATABASE_URL` | SQLite 数据库文件路径，保持默认即可 | `"file:./dev.db"` |
+| `NEXTAUTH_SECRET` | 会话加密密钥，用随机字符串即可。可在终端运行 `openssl rand -base64 32` 生成 | `"abc123..."` |
+
+### 可选项 — 阿里云 OSS（视频/封面存储）
+
+> 不配置则视频上传功能不可用，首页使用内置示例图片。
+
+| 变量 | 说明 | 获取方式 |
+|------|------|----------|
+| `OSS_REGION` | OSS 存储区域 | 阿里云控制台 → OSS → Bucket 列表 → 地址栏可看到，如 `oss-cn-guangzhou` |
+| `OSS_ACCESS_KEY_ID` | 阿里云 AccessKey ID | 阿里云控制台 → 头像 → AccessKey 管理 → 创建 AccessKey |
+| `OSS_ACCESS_KEY_SECRET` | 阿里云 AccessKey Secret | 创建时只显示一次，务必保存好 |
+| `OSS_BUCKET` | OSS Bucket 名称 | 阿里云控制台 → OSS → 创建 Bucket → 填写的 Bucket 名 |
+
+### 可选项 — 阿里云 VOD（视频点播）
+
+> 不配置则视频走 OSS 直链存储。配置后支持鉴权播放、转码、播放统计等功能。
+
+| 变量 | 说明 | 获取方式 |
+|------|------|----------|
+| `VOD_REGION` | VOD 服务区域 | 阿里云控制台 → 视频点播 → 基础设置 → 服务区域，如 `cn-shenzhen` |
+| `VOD_ACCESS_KEY_ID` | 阿里云 AccessKey ID | 同 OSS，可共用同一个 AccessKey |
+| `VOD_ACCESS_KEY_SECRET` | 阿里云 AccessKey Secret | 同 OSS |
+| `VOD_SPACE_NAME` | VOD 媒体空间名称 | 阿里云控制台 → 视频点播 → 配置管理 → 媒体空间 → 复制空间 ID |
+
+### 完整 .env 示例
 
 ```env
 DATABASE_URL="file:./dev.db"
-NEXTAUTH_URL="http://localhost:3005"
 NEXTAUTH_SECRET="your-secret-key-here"
 
-# 阿里云 OSS（可选，不配置则使用示例图片）
+# 阿里云 OSS
 OSS_REGION=oss-cn-guangzhou
 OSS_ACCESS_KEY_ID=your-access-key-id
 OSS_ACCESS_KEY_SECRET=your-access-key-secret
 OSS_BUCKET=your-bucket-name
 
-# 阿里云 VOD（可选，不配置则视频走 OSS 存储）
+# 阿里云 VOD
 VOD_REGION=cn-shenzhen
 VOD_ACCESS_KEY_ID=your-access-key-id
 VOD_ACCESS_KEY_SECRET=your-access-key-secret
 VOD_SPACE_NAME=your-space-name
 ```
+
+### 阿里云账号开通步骤
+
+1. 注册/登录 [阿里云控制台](https://www.aliyun.com/)
+2. 开通 **对象存储 OSS** 服务（按量付费，有免费额度）
+3. 创建一个 Bucket（权限设为「私有」）
+4. 开通 **视频点播 VOD** 服务（如需使用）
+5. 创建一个媒体空间
+6. 进入 [AccessKey 管理页面](https://usercentre.console.aliyun.com/)，创建 AccessKey
+7. 将获取到的值填入 `.env` 文件
 
 ## 常见问题
 
