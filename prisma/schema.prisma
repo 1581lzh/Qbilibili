@@ -1,0 +1,88 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(cuid())
+  name         String        @unique
+  password     String
+  role         String        @default("user")
+  tokenVersion Int           @default(0)
+  avatar       String?
+  videos       Video[]
+  comments     Comment[]
+  likes        Like[]
+  commentLikes CommentLike[]
+  favorites    Favorite[]
+  createdAt    DateTime      @default(now())
+}
+
+model Video {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  coverUrl    String
+  videoUrl    String
+  vodVideoId  String?
+  duration    Int?
+  views       Int      @default(0)
+  author      User     @relation(fields: [authorId], references: [id])
+  authorId    String
+  comments    Comment[]
+  likes       Like[]
+  favorites   Favorite[]
+  createdAt   DateTime @default(now())
+}
+
+model Comment {
+  id        String    @id @default(cuid())
+  content   String
+  video     Video     @relation(fields: [videoId], references: [id])
+  videoId   String
+  author    User      @relation(fields: [authorId], references: [id])
+  authorId  String
+  parent    Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  parentId  String?
+  replies   Comment[] @relation("CommentReplies")
+  likes     CommentLike[]
+  createdAt DateTime  @default(now())
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  video     Video    @relation(fields: [videoId], references: [id])
+  videoId   String
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  createdAt DateTime @default(now())
+
+  @@unique([videoId, userId])
+}
+
+model CommentLike {
+  id        String   @id @default(cuid())
+  comment   Comment  @relation(fields: [commentId], references: [id])
+  commentId String
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  createdAt DateTime @default(now())
+
+  @@unique([commentId, userId])
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  video     Video    @relation(fields: [videoId], references: [id])
+  videoId   String
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  createdAt DateTime @default(now())
+
+  @@unique([videoId, userId])
+}

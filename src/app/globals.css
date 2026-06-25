@@ -1,0 +1,39 @@
+@import "tailwindcss";
+@custom-variant dark (&:is(.dark *));
+
+.dark-transition,
+.dark-transition *,
+.dark-transition *::before,
+.dark-transition *::after {
+  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease !important;
+}
+
+@keyframes comment-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(-12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.prism-control-bar,
+.prism-auto-hide-control {
+  opacity: 1 !important;
+  visibility: visible !important;
+  transition: none !important;
+}
+
+.prism-auto-hide-control .prism-control-bar {
+  opacity: 1 !important;
+}
