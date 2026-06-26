@@ -304,7 +304,7 @@ export default function UploadPage() {
           title: title.trim(),
           description: description.trim(),
           coverUrl: coverUrl || undefined,
-          videoUrl,
+          videoUrl: videoUrl || undefined,
           vodVideoId: vodVideoId || undefined,
         }),
       });

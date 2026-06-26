@@ -3,6 +3,7 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import { Repeat, Play, SkipBack, SkipForward } from "lucide-react";
 import { createRoot } from "react-dom/client";
+import { toHttps } from "@/lib/image";
 
 type PlayMode = "loop" | "single" | "next";
 
@@ -296,7 +297,7 @@ export default function VideoPlayer({
         let playlist: { name: string; source: string }[] = [];
         try {
           const lr = await fetch("/api/videos");
-          if (lr.ok) { const vs = await lr.json(); playlist = vs.map((v: any) => ({ name: v.title, source: v.videoUrl })); }
+          if (lr.ok) { const vs = await lr.json(); playlist = vs.map((v: any) => ({ name: v.title, source: toHttps(v.videoUrl) })); }
         } catch {}
 
         const cfg: any = { id: cid, width: "100%", height: "100%", autoplay: shouldAutoPlay, preload: true, cover: initialVideo.coverUrl || "" };
@@ -307,7 +308,7 @@ export default function VideoPlayer({
           const { playAuth } = await res.json();
           cfg.vid = initialVideo.vodVideoId; cfg.playauth = playAuth;
         } else if (initialVideo.videoUrl) {
-          cfg.source = initialVideo.videoUrl;
+          cfg.source = toHttps(initialVideo.videoUrl);
         } else { return; }
 
         if (window.AliPlayerComponent?.PlaylistComponent && playlist.length > 0) {

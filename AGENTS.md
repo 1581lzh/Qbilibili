@@ -179,7 +179,12 @@ H:\bilibili/
 │   │   ├── auth.ts                  # NextAuth 配置 + getSession()
 │   │   ├── db.ts                    # Prisma 客户端
 │   │   ├── oss.ts                   # 阿里云 OSS 客户端
-│   │   └── vod.ts                   # 阿里云 VOD 服务端封装
+│   │   ├── vod.ts                   # 阿里云 VOD 服务端封装
+│   │   ├── password.ts              # 密码哈希工具（bcryptjs）
+│   │   ├── image.ts                 # 图片/URL 优化工具（toHttps + OSS 图片处理参数生成）
+│   │   ├── validation.ts            # zod 输入验证 schema
+│   │   ├── csrf.ts                  # CSRF 防护（Origin/Referer 校验）
+│   │   └── rate-limit.ts            # 内存速率限制器
 │   └── types/index.ts               # TypeScript 类型定义
 ├── prisma/
 │   ├── schema.prisma                # 数据库 schema

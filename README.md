@@ -30,6 +30,8 @@
 - 安全防护（SQL注入/XSS/CSRF防护、速率限制、输入验证、文件上传安全、安全响应头）
 - 会话安全（JWT 7天有效期、密码修改后旧会话自动失效、已删除用户token撤销）
 - 数据一致性保障（关键删除操作使用事务，级联删除完整）
+- 封面图片懒加载 + OSS图片处理（按需缩放+WebP格式转换）
+- OSS URL 自动升级 HTTPS（消除 Mixed Content 警告）
 
 ## 技术栈
 
@@ -115,12 +117,37 @@ EXPOSE 3005
 CMD ["npm", "start"]
 ```
 
-## Nginx 配置
+## Nginx 配置（HTTPS）
+
+生产环境使用 Nginx 反向代理 + SSL 终止：
 
 ```nginx
+limit_req_zone $binary_remote_addr zone=api:10m rate=50r/s;
+
+# HTTP → HTTPS 跳转
 server {
     listen 80;
+    listen [::]:80;
     server_name your-domain.com;
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# HTTPS 主站
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name your-domain.com;
+
+    ssl_certificate     /etc/nginx/ssl/cert.pem;
+    ssl_certificate_key /etc/nginx/ssl/cert.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_tickets off;
+
+    client_max_body_size 50m;
 
     location / {
         proxy_pass http://127.0.0.1:3005;
@@ -128,10 +155,15 @@ server {
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
         proxy_set_header Host $host;
-        proxy_cache_bypass $http_upgrade;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        limit_req zone=api burst=100 nodelay;
     }
 }
 ```
+
+> **限流说明**：Next.js 页面刷新会并发发出大量 RSC 请求，rate=50r/s burst=100 可避免 503。
 
 ## systemd 服务部署（CentOS/Linux）
 

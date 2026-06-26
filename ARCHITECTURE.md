@@ -30,7 +30,7 @@
 - **@alicloud/vod20170321** — 阿里云 VOD 服务端 SDK
 
 ### 部署
-- **Nginx** — Web 服务器
+- **Nginx** — Web 服务器 + HTTPS 反向代理
 - **公网服务器** — 生产环境部署
 
 ## 目录结构
@@ -105,7 +105,8 @@ H:\bilibili/
 │   │   ├── validation.ts      # zod 输入验证 schema（用户名/密码/评论/视频/搜索）
 │   │   ├── csrf.ts            # CSRF 防护（Origin/Referer 校验）
 │   │   ├── rate-limit.ts      # 内存速率限制器
-│   │   └── password.ts        # 密码哈希工具（bcryptjs）
+│   │   ├── password.ts        # 密码哈希工具（bcryptjs）
+│   │   └── image.ts           # 图片/URL 优化工具（toHttps + OSS 图片处理参数生成）
 │   ├── types/                 # TypeScript 类型定义
 │   │   └── index.ts           # 共享类型（Video/VideoWithAuthor/Comment/Reply 等）
 │   └── generated/             # Prisma 生成的客户端
@@ -217,6 +218,12 @@ H:\bilibili/
 ### 文件上传
 - `POST /api/upload` — 上传视频/封面文件到阿里云 OSS
 
+### 图片优化
+- 所有封面图使用 `optimizedCover()` 工具函数（`src/lib/image.ts`）生成带 OSS 图片处理参数的 URL
+- 支持按需缩放（`x-oss-process=image/resize,w_{width}`）和格式转换（`/format,webp`）
+- 默认宽度 640px，推荐栏 400px，管理面板缩略图 300px
+- 所有封面 `<img>` 标签添加 `loading="lazy"` 实现懒加载
+
 ### VOD 视频点播
 - `POST /api/vod` — VOD 鉴权 API
   - `action: "create"` — 获取上传凭证（需要 title、fileName）
@@ -327,26 +334,58 @@ npm run dev
    - 上传 `prisma/dev.db` 数据库文件
    - 视频/封面存储在阿里云 OSS，无需上传
 
-3. **配置 Nginx**
+3. **配置 Nginx（HTTPS 反向代理）**
+
+   配置文件 `/etc/nginx/conf.d/ssl.conf`：
    ```nginx
+   limit_req_zone $binary_remote_addr zone=api:10m rate=50r/s;
+
+   # HTTP → HTTPS 跳转
    server {
        listen 80;
+       listen [::]:80;
        server_name your-domain.com;
-       
        location / {
-           proxy_pass http://localhost:3005;
+           return 301 https://$host$request_uri;
+       }
+   }
+
+   # HTTPS 主站
+   server {
+       listen 443 ssl;
+       listen [::]:443 ssl;
+       http2 on;
+       server_name your-domain.com;
+
+       ssl_certificate     /etc/nginx/ssl/cert.pem;
+       ssl_certificate_key /etc/nginx/ssl/cert.key;
+       ssl_protocols TLSv1.2 TLSv1.3;
+       ssl_session_cache shared:SSL:10m;
+       ssl_session_tickets off;
+
+       client_max_body_size 50m;
+
+       location / {
+           proxy_pass http://127.0.0.1:3005;
            proxy_http_version 1.1;
            proxy_set_header Upgrade $http_upgrade;
            proxy_set_header Connection 'upgrade';
            proxy_set_header Host $host;
-           proxy_cache_bypass $http_upgrade;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+           limit_req zone=api burst=100 nodelay;
        }
    }
    ```
 
+   > **限流说明**：Next.js 页面刷新会并发发出大量 RSC 请求，
+   > rate 从 10r/s 提升到 50r/s，burst 从 20 提升到 100，避免刷新时 503。
+
 4. **启动服务**
    ```bash
-   npm run start
+   sudo ./deploy.sh install    # 安装 systemd 服务
+   sudo nginx -t && sudo systemctl reload nginx  # 重载 nginx
    ```
 
 ### systemd 服务部署（推荐）
@@ -357,6 +396,14 @@ sudo ./deploy.sh install    # 安装服务（自动构建+注册+启动）
 sudo ./deploy.sh status     # 查看状态
 sudo ./deploy.sh restart    # 重启
 sudo journalctl -u bilibili -f  # 查看日志
+```
+
+### 防火墙
+
+```bash
+sudo firewall-cmd --permanent --add-port=80/tcp    # HTTP（自动跳转 HTTPS）
+sudo firewall-cmd --permanent --add-port=443/tcp   # HTTPS
+sudo firewall-cmd --reload
 ```
 
 ## 依赖包说明

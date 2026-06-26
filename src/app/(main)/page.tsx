@@ -3,6 +3,8 @@ import { db } from "@/lib/db";
 import VideoCard from "@/components/video/video-card";
 import { VideoWithAuthor } from "@/types";
 
+export const dynamic = "force-dynamic";
+
 export default async function HomePage() {
   const videos: VideoWithAuthor[] = await db.video.findMany({
     include: { author: { select: { id: true, name: true } }, _count: { select: { likes: true, favorites: true } } },

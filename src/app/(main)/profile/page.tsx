@@ -6,6 +6,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { optimizedCover } from "@/lib/image";
 
 const AVATAR_COLORS = [
   "bg-pink-500", "bg-violet-500", "bg-blue-500", "bg-cyan-500",
@@ -272,8 +273,9 @@ export default function ProfilePage() {
           <Link key={v.id} href={`/video/${v.id}`} className="group block" onClick={() => sessionStorage.setItem("autoPlayVideo", v.id)}>
             <div className="overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800">
               <img
-                src={v.coverUrl}
+                src={optimizedCover(v.coverUrl)}
                 alt={v.title}
+                loading="lazy"
                 className="aspect-video w-full object-cover transition-transform duration-300 group-hover:scale-105"
               />
             </div>
@@ -430,8 +432,9 @@ export default function ProfilePage() {
                        <Link href={`/video/${v.id}`} onClick={() => sessionStorage.setItem("autoPlayVideo", v.id)}>
                         <div className="overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800">
                           <img
-                            src={v.coverUrl}
+                            src={optimizedCover(v.coverUrl)}
                             alt={v.title}
+                            loading="lazy"
                             className="aspect-video w-full object-cover transition-transform duration-300 group-hover:scale-105"
                           />
                         </div>
@@ -521,7 +524,7 @@ export default function ProfilePage() {
                           >
                             <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
                               <div className="h-32 w-full overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800 sm:h-20 sm:w-32 sm:shrink-0">
-                                <img src={comment.video.coverUrl} alt={comment.video.title} className="h-full w-full object-cover" />
+                                <img src={optimizedCover(comment.video.coverUrl, 400)} alt={comment.video.title} loading="lazy" className="h-full w-full object-cover" />
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
@@ -617,7 +620,7 @@ export default function ProfilePage() {
                     >
                       <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
                         <div className="h-32 w-full overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800 sm:h-20 sm:w-32 sm:shrink-0">
-                          <img src={comment.video.coverUrl} alt={comment.video.title} className="h-full w-full object-cover" />
+                          <img src={optimizedCover(comment.video.coverUrl, 400)} alt={comment.video.title} loading="lazy" className="h-full w-full object-cover" />
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">

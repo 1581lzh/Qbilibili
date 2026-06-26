@@ -1,6 +1,6 @@
 # Bilibili MVP 进度文档
 
-## 当前状态：类型修复已完成
+## 当前状态：原版功能合并已完成
 
 开发服务器：http://localhost:3005
 
@@ -71,6 +71,11 @@
 - **个人主页错误处理** — API 返回错误时自动跳转首页，防止 null 数据崩溃
 
 ### 本次会话新增/修复
+- **原版功能合并** — 从 bilibili 原版合并图片优化功能到 Qbilibili
+  - 新增 `src/lib/image.ts` 工具函数（`toHttps()` + `optimizedCover()`）
+  - 首页添加 `export const dynamic = "force-dynamic"` 避免静态缓存
+  - 上传页修复 `videoUrl: videoUrl || undefined` 空值处理
+  - 9 个文件添加 `optimizedCover()` + `loading="lazy"` 懒加载
 - **Linux 构建类型修复** — Prisma 查询结果在 CentOS 构建时无法自动推断类型，导致隐式 any 错误
   - `src/app/(main)/page.tsx` — 添加 `VideoWithAuthor[]` 类型标注
   - `src/app/(main)/video/[id]/page.tsx` — 添加 `{ id: string }[]` 类型标注
@@ -175,7 +180,7 @@
 9. **视频详情优化** — 播放量统计、点赞数实时更新
 
 ### 长期
-10. **性能优化** — 图片懒加载、代码分割
+10. **性能优化** — 代码分割、首屏加载优化
 11. **监控日志** — 错误监控、用户行为分析
 
 ## 技术债务

@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { optimizedCover } from "@/lib/image";
 
 interface Stats {
   totalUsers: number;
@@ -259,7 +260,7 @@ export default function AdminPage() {
                     <div className="space-y-2">
                       {filteredVideos.map((v) => (
                         <div key={v.id} className="flex items-center gap-4 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800">
-                          <img src={v.coverUrl} alt={v.title} className="h-16 w-24 shrink-0 rounded-md object-cover" />
+                          <img src={optimizedCover(v.coverUrl, 300)} alt={v.title} loading="lazy" className="h-16 w-24 shrink-0 rounded-md object-cover" />
                           <div className="min-w-0 flex-1">
                             <p className="font-medium text-zinc-900 dark:text-zinc-100">{v.title}</p>
                             <p className="text-xs text-zinc-500">UP {v.author.name} · 播放 {v.views} · 点赞 {v._count.likes} · 评论 {v._count.comments} · 收藏 {v._count.favorites}</p>
@@ -274,7 +275,7 @@ export default function AdminPage() {
                     <div className="space-y-2">
                       {filteredComments.map((c) => (
                         <div key={c.id} className="flex items-center gap-4 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800">
-                          <img src={c.video.coverUrl} alt={c.video.title} className="h-16 w-24 shrink-0 rounded-md object-cover" />
+                          <img src={optimizedCover(c.video.coverUrl, 300)} alt={c.video.title} loading="lazy" className="h-16 w-24 shrink-0 rounded-md object-cover" />
                           <div className="min-w-0 flex-1">
                             <p className="text-sm text-zinc-900 dark:text-zinc-100">{c.content}</p>
                             <p className="text-xs text-zinc-500">用户 {c.author.name} · 视频「{c.video.title}」 · 点赞 {c._count.likes} · 回复 {c._count.replies}</p>
@@ -289,7 +290,7 @@ export default function AdminPage() {
                     <div className="space-y-2">
                       {filteredLikes.map((l) => (
                         <div key={l.id} className="flex items-center gap-4 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800">
-                          <img src={l.video.coverUrl} alt={l.video.title} className="h-16 w-24 shrink-0 rounded-md object-cover" />
+                          <img src={optimizedCover(l.video.coverUrl, 300)} alt={l.video.title} loading="lazy" className="h-16 w-24 shrink-0 rounded-md object-cover" />
                           <div className="min-w-0 flex-1">
                             <p className="font-medium text-zinc-900 dark:text-zinc-100">{l.user.name} 点赞了视频「{l.video.title}」</p>
                           </div>
@@ -303,7 +304,7 @@ export default function AdminPage() {
                     <div className="space-y-2">
                       {filteredCommentLikes.map((cl) => (
                         <div key={cl.id} className="flex items-center gap-4 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800">
-                          <img src={cl.comment.video.coverUrl} alt={cl.comment.video.title} className="h-16 w-24 shrink-0 rounded-md object-cover" />
+                          <img src={optimizedCover(cl.comment.video.coverUrl, 300)} alt={cl.comment.video.title} loading="lazy" className="h-16 w-24 shrink-0 rounded-md object-cover" />
                           <div className="min-w-0 flex-1">
                             <p className="font-medium text-zinc-900 dark:text-zinc-100">{cl.user.name} 点赞了评论「{cl.comment.content.slice(0, 50)}」</p>
                             <p className="text-xs text-zinc-500">视频「{cl.comment.video.title}」</p>
@@ -318,7 +319,7 @@ export default function AdminPage() {
                     <div className="space-y-2">
                       {filteredFavorites.map((f) => (
                         <div key={f.id} className="flex items-center gap-4 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800">
-                          <img src={f.video.coverUrl} alt={f.video.title} className="h-16 w-24 shrink-0 rounded-md object-cover" />
+                          <img src={optimizedCover(f.video.coverUrl, 300)} alt={f.video.title} loading="lazy" className="h-16 w-24 shrink-0 rounded-md object-cover" />
                           <div className="min-w-0 flex-1">
                             <p className="font-medium text-zinc-900 dark:text-zinc-100">{f.user.name} 收藏了视频「{f.video.title}」</p>
                           </div>

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { optimizedCover } from "@/lib/image";
 
 interface Video {
   id: string;
@@ -40,8 +41,9 @@ export default function VideoCard({ video, index = 0 }: { video: Video; index?: 
         <div className="aspect-video overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800">
           {video.coverUrl ? (
             <img
-              src={video.coverUrl}
+              src={optimizedCover(video.coverUrl)}
               alt={video.title}
+              loading="lazy"
               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
             />
           ) : (

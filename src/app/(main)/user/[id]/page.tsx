@@ -4,6 +4,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import Link from "next/link";
+import { optimizedCover } from "@/lib/image";
 
 const AVATAR_COLORS = [
   "bg-pink-500", "bg-violet-500", "bg-blue-500", "bg-cyan-500",
@@ -106,8 +107,9 @@ export default function UserPublicPage({ params }: { params: Promise<{ id: strin
               <Link key={v.id} href={`/video/${v.id}`} className="group block" onClick={() => sessionStorage.setItem("autoPlayVideo", v.id)}>
                 <div className="overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800">
                   <img
-                    src={v.coverUrl}
+                    src={optimizedCover(v.coverUrl)}
                     alt={v.title}
+                    loading="lazy"
                     className="aspect-video w-full object-cover transition-transform duration-300 group-hover:scale-105"
                   />
                 </div>
