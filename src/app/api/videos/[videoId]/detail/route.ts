@@ -17,37 +17,25 @@ export async function GET(
     return NextResponse.json({ error: "视频不存在" }, { status: 404 });
   }
 
-  const allVideos = await db.video.findMany({
-    orderBy: { createdAt: "desc" },
-    select: { id: true },
-  });
+  const session = await getSession();
+  const userId = session?.user?.id;
 
-  const currentIndex = allVideos.findIndex((v) => v.id === videoId);
-  const nextVideo =
-    currentIndex >= 0 && currentIndex < allVideos.length - 1
-      ? allVideos[currentIndex + 1]
-      : null;
-  const prevVideo =
-    currentIndex > 0
-      ? allVideos[currentIndex - 1]
-      : null;
-
-  const [likeCount, favoriteCount] = await Promise.all([
+  const [likeCount, favoriteCount, existingLike, existingFavorite, nextVideo, prevVideo] = await Promise.all([
     db.like.count({ where: { videoId } }),
     db.favorite.count({ where: { videoId } }),
+    userId ? db.like.findUnique({ where: { videoId_userId: { videoId, userId } } }) : null,
+    userId ? db.favorite.findUnique({ where: { videoId_userId: { videoId, userId } } }) : null,
+    db.video.findFirst({
+      where: { createdAt: { lt: video.createdAt } },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    }),
+    db.video.findFirst({
+      where: { createdAt: { gt: video.createdAt } },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    }),
   ]);
-
-  let liked = false;
-  let favorited = false;
-  const session = await getSession();
-  if (session?.user?.id) {
-    const [existingLike, existingFavorite] = await Promise.all([
-      db.like.findUnique({ where: { videoId_userId: { videoId, userId: session.user.id } } }),
-      db.favorite.findUnique({ where: { videoId_userId: { videoId, userId: session.user.id } } }),
-    ]);
-    liked = !!existingLike;
-    favorited = !!existingFavorite;
-  }
 
   return NextResponse.json({
     id: video.id,
@@ -62,7 +50,7 @@ export async function GET(
     prevVideoId: prevVideo?.id ?? null,
     likeCount,
     favoriteCount,
-    liked,
-    favorited,
+    liked: !!existingLike,
+    favorited: !!existingFavorite,
   });
 }

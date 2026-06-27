@@ -38,6 +38,7 @@ export async function POST(request: Request) {
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const q = searchParams.get("q")?.trim();
+  const limit = Math.min(parseInt(searchParams.get("limit") || "100", 10), 200);
 
   const where = q
     ? {
@@ -56,6 +57,7 @@ export async function GET(request: Request) {
       _count: { select: { likes: true, favorites: true } },
     },
     orderBy: { createdAt: "desc" },
+    take: q ? undefined : limit,
   });
 
   return NextResponse.json(videos);

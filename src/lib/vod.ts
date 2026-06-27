@@ -3,13 +3,18 @@ import { CreateUploadVideoRequest, GetVideoPlayAuthRequest, RefreshUploadVideoRe
 
 const region = process.env.VOD_REGION || "cn-shenzhen";
 
+let vodClient: any = null;
+
 function getVodClient() {
-  return new (Client as any)({
-    accessKeyId: process.env.VOD_ACCESS_KEY_ID!,
-    accessKeySecret: process.env.VOD_ACCESS_KEY_SECRET!,
-    regionId: region,
-    endpoint: `vod.${region}.aliyuncs.com`,
-  });
+  if (!vodClient) {
+    vodClient = new (Client as any)({
+      accessKeyId: process.env.VOD_ACCESS_KEY_ID!,
+      accessKeySecret: process.env.VOD_ACCESS_KEY_SECRET!,
+      regionId: region,
+      endpoint: `vod.${region}.aliyuncs.com`,
+    });
+  }
+  return vodClient;
 }
 
 export interface UploadAuth {
@@ -43,17 +48,28 @@ export interface PlayAuth {
   requestId: string;
 }
 
+const playAuthCache = new Map<string, { auth: PlayAuth; expireAt: number }>();
+const PLAY_AUTH_TTL = 80_000;
+
 export async function getVideoPlayAuth(videoId: string): Promise<PlayAuth> {
+  const cached = playAuthCache.get(videoId);
+  if (cached && Date.now() < cached.expireAt) {
+    return cached.auth;
+  }
+
   const client = getVodClient();
   const req = new GetVideoPlayAuthRequest({ videoId });
   const resp = await client.getVideoPlayAuth(req);
   const body = resp.body;
 
-  return {
+  const auth: PlayAuth = {
     playAuth: body.playAuth,
     videoId: body.videoId,
     requestId: body.requestId,
   };
+
+  playAuthCache.set(videoId, { auth, expireAt: Date.now() + PLAY_AUTH_TTL });
+  return auth;
 }
 
 export async function refreshUploadVideo(videoId: string): Promise<UploadAuth> {

@@ -15,37 +15,26 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
     notFound();
   }
 
-  const likeCount = await db.like.count({ where: { videoId: id } });
-  const favoriteCount = await db.favorite.count({ where: { videoId: id } });
   const session = await getSession();
   const isOwner = session?.user?.id === video.authorId;
+  const userId = session?.user?.id;
 
-  let initialLiked = false;
-  let initialFavorited = false;
-  if (session?.user?.id) {
-    const existingLike = await db.like.findUnique({
-      where: { videoId_userId: { videoId: id, userId: session.user.id } },
-    });
-    initialLiked = !!existingLike;
-    const existingFavorite = await db.favorite.findUnique({
-      where: { videoId_userId: { videoId: id, userId: session.user.id } },
-    });
-    initialFavorited = !!existingFavorite;
-  }
-
-  const allVideos: { id: string }[] = await db.video.findMany({
-    orderBy: { createdAt: "desc" },
-    select: { id: true },
-  });
-  const currentIndex = allVideos.findIndex((v) => v.id === id);
-  const nextVideoId =
-    currentIndex >= 0 && currentIndex < allVideos.length - 1
-      ? allVideos[currentIndex + 1].id
-      : null;
-  const prevVideoId =
-    currentIndex > 0
-      ? allVideos[currentIndex - 1].id
-      : null;
+  const [likeCount, favoriteCount, existingLike, existingFavorite, nextVideo, prevVideo] = await Promise.all([
+    db.like.count({ where: { videoId: id } }),
+    db.favorite.count({ where: { videoId: id } }),
+    userId ? db.like.findUnique({ where: { videoId_userId: { videoId: id, userId } } }) : null,
+    userId ? db.favorite.findUnique({ where: { videoId_userId: { videoId: id, userId } } }) : null,
+    db.video.findFirst({
+      where: { createdAt: { lt: video.createdAt } },
+      orderBy: { createdAt: "desc" },
+      select: { id: true },
+    }),
+    db.video.findFirst({
+      where: { createdAt: { gt: video.createdAt } },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    }),
+  ]);
 
   return (
     <div className="mx-auto max-w-7xl px-2 py-4 sm:px-4 sm:py-6">
@@ -60,13 +49,13 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
           author: video.author,
           createdAt: video.createdAt,
         }}
-        nextVideoId={nextVideoId ?? undefined}
-        prevVideoId={prevVideoId ?? undefined}
+        nextVideoId={nextVideo?.id}
+        prevVideoId={prevVideo?.id}
         isOwner={isOwner}
         initialLikeCount={likeCount}
-        initialLiked={initialLiked}
+        initialLiked={!!existingLike}
         initialFavoriteCount={favoriteCount}
-        initialFavorited={initialFavorited}
+        initialFavorited={!!existingFavorite}
         userId={session?.user?.id}
       />
     </div>

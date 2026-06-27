@@ -296,7 +296,7 @@ export default function VideoPlayer({
 
         let playlist: { name: string; source: string }[] = [];
         try {
-          const lr = await fetch("/api/videos");
+          const lr = await fetch("/api/videos?limit=50");
           if (lr.ok) { const vs = await lr.json(); playlist = vs.map((v: any) => ({ name: v.title, source: toHttps(v.videoUrl) })); }
         } catch {}
 
