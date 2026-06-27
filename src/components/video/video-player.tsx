@@ -406,6 +406,13 @@ export default function VideoPlayer({
           containerEl.addEventListener("click", clickHandler);
 
           if ("ontouchstart" in window || navigator.maxTouchPoints > 0) {
+            containerEl.addEventListener("touchstart", (e: Event) => {
+              const t = (e as TouchEvent).target as HTMLElement;
+              if (!t.closest(".prism-controlbar") && !t.closest(".prism-setting-list") && !t.closest(".prism-setting-selector") && !t.closest(".bili-nav-btn")) {
+                e.preventDefault();
+              }
+            }, { capture: true, passive: false });
+
             touchHandler = () => {
               const now = Date.now();
               if (now - lastTap < 300) { if (player.paused()) player.play(); else player.pause(); lastTap = 0; } else { lastTap = now; }
