@@ -292,7 +292,7 @@ export function Header() {
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -4 }}
                       transition={{ duration: 0.15 }}
-                      className="absolute left-0 top-full z-[51] mt-1 w-full rounded-md border border-zinc-200 p-2 shadow-lg dark:border-zinc-700"
+                      className="absolute left-0 top-full z-[51] mt-1 w-full rounded-md border border-zinc-200 bg-white/75 p-2 shadow-lg dark:border-zinc-700 dark:bg-zinc-900/75"
                     >
                     <div className="mb-2 flex items-center justify-between">
                       <span className="text-xs font-medium text-zinc-500">搜索历史</span>
@@ -381,7 +381,7 @@ export function Header() {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: -10, scale: 0.95 }}
                       transition={{ duration: 0.15 }}
-                      className="absolute right-0 top-10 z-[51] w-44 rounded-lg border border-zinc-200 py-1 shadow-lg dark:border-zinc-700"
+                      className="absolute right-0 top-10 z-[51] w-44 rounded-lg border border-zinc-200 bg-white/75 py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-900/75"
                       onMouseEnter={cancelHide}
                       onMouseLeave={hideMenu}
                     >
