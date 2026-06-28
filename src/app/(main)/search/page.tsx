@@ -201,7 +201,7 @@ function SearchResults() {
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
                 <Link href={`/video/${comment.video.id}`} className="h-32 w-full overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800 sm:h-20 sm:w-32 sm:shrink-0">
-                  <img src={optimizedCover(comment.video.coverUrl, 400)} alt={comment.video.title} loading="lazy" className="h-full w-full object-cover" />
+                  <img src={optimizedCover(comment.video.coverUrl, 400)} alt={comment.video.title} width={128} height={72} loading="lazy" decoding="async" className="h-full w-full object-cover" />
                 </Link>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">

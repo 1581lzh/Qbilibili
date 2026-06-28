@@ -71,6 +71,14 @@
 - **个人主页错误处理** — API 返回错误时自动跳转首页，防止 null 数据崩溃
 
 ### 本次会话新增/修复
+- **弱网图片加载优化** — 全面优化弱网环境下图片加载性能
+  - `optimizedCover()` 支持 picsum.photos 图片缩放（替换 URL 末尾尺寸参数，请求小尺寸版本）
+  - 所有 `<img>` 标签添加 `width`/`height`（消除 CLS）、`decoding="async"`（异步解码）
+  - `layout.tsx` 添加 OSS 域名 `preconnect` + `dns-prefetch`（提前建立连接）
+  - OSS 图片添加 `quality,q_80` 质量参数（减小文件体积）
+  - Aliplayer 播放器封面调用 `optimizedCover(coverUrl, 1280)` 优化
+  - 未上传封面时使用本地 `public/placeholder.svg`（消除 picsum.photos 外部依赖）
+  - 涉及文件：`image.ts`、`layout.tsx`、`video-card.tsx`、`video-player.tsx`、`recommendations.tsx`、`profile/page.tsx`、`search/page.tsx`、`admin/page.tsx`、`user/[id]/page.tsx`、`upload/page.tsx`、`api/videos/route.ts`
 - **原版功能合并** — 从 bilibili 原版合并图片优化功能到 Qbilibili
   - 新增 `src/lib/image.ts` 工具函数（`toHttps()` + `optimizedCover()`）
   - 首页添加 `export const dynamic = "force-dynamic"` 避免静态缓存

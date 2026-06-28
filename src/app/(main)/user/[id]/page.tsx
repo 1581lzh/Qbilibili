@@ -109,7 +109,10 @@ export default function UserPublicPage({ params }: { params: Promise<{ id: strin
                   <img
                     src={optimizedCover(v.coverUrl)}
                     alt={v.title}
+                    width={640}
+                    height={360}
                     loading="lazy"
+                    decoding="async"
                     className="aspect-video w-full object-cover transition-transform duration-300 group-hover:scale-105"
                   />
                 </div>

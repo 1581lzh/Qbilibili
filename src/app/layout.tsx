@@ -15,6 +15,8 @@ export default function RootLayout({
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="preconnect" href="https://lolpk.oss-cn-guangzhou.aliyuncs.com" />
+        <link rel="dns-prefetch" href="https://lolpk.oss-cn-guangzhou.aliyuncs.com" />
         <script
           dangerouslySetInnerHTML={{
             __html: `

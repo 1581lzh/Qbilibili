@@ -450,6 +450,9 @@ export default function UploadPage() {
                 <img
                   src={thumbPreview}
                   alt="封面预览"
+                  width={256}
+                  height={144}
+                  decoding="async"
                   className="mt-2 h-36 w-64 rounded-lg object-cover"
                 />
               )}

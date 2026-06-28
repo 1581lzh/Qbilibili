@@ -218,11 +218,14 @@ H:\bilibili/
 ### 文件上传
 - `POST /api/upload` — 上传视频/封面文件到阿里云 OSS
 
-### 图片优化
-- 所有封面图使用 `optimizedCover()` 工具函数（`src/lib/image.ts`）生成带 OSS 图片处理参数的 URL
-- 支持按需缩放（`x-oss-process=image/resize,w_{width}`）和格式转换（`/format,webp`）
-- 默认宽度 640px，推荐栏 400px，管理面板缩略图 300px
-- 所有封面 `<img>` 标签添加 `loading="lazy"` 实现懒加载
+### 图片优化（弱网加载优化）
+- 所有封面图使用 `optimizedCover()` 工具函数（`src/lib/image.ts`）生成优化 URL
+- **OSS 图片**：按需缩放（`x-oss-process=image/resize,w_{width}`）、WebP 格式转换、质量压缩（`quality,q_80`）
+- **picsum.photos 图片**：自动替换 URL 末尾尺寸参数（如 `/1280/720` → `/640/360`），请求 picsum 缩放版本
+- 所有 `<img>` 标签添加 `width`/`height` 属性（消除 CLS）、`loading="lazy"`（懒加载）、`decoding="async"`（异步解码）
+- `layout.tsx` 添加 OSS 域名 `preconnect` + `dns-prefetch`（提前建立连接）
+- 未上传封面时使用本地 `public/placeholder.svg` 占位图（消除外部依赖）
+- 封面宽度：首页/用户页 640px，推荐栏/评论缩略图 400px，管理面板 300px，Aliplayer 播放器封面 1280px
 
 ### VOD 视频点播
 - `POST /api/vod` — VOD 鉴权 API

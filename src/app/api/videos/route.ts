@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     data: {
       title: title.trim(),
       description: description?.trim() || null,
-      coverUrl: coverUrl || `https://picsum.photos/seed/${Date.now()}/640/360`,
+      coverUrl: coverUrl || "/placeholder.svg",
       videoUrl: videoUrl || "",
       vodVideoId: vodVideoId || null,
       authorId: session.user.id,

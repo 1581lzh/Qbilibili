@@ -275,7 +275,10 @@ export default function ProfilePage() {
               <img
                 src={optimizedCover(v.coverUrl)}
                 alt={v.title}
+                width={640}
+                height={360}
                 loading="lazy"
+                decoding="async"
                 className="aspect-video w-full object-cover transition-transform duration-300 group-hover:scale-105"
               />
             </div>
@@ -524,7 +527,7 @@ export default function ProfilePage() {
                           >
                             <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
                               <div className="h-32 w-full overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800 sm:h-20 sm:w-32 sm:shrink-0">
-                                <img src={optimizedCover(comment.video.coverUrl, 400)} alt={comment.video.title} loading="lazy" className="h-full w-full object-cover" />
+                                <img src={optimizedCover(comment.video.coverUrl, 400)} alt={comment.video.title} width={128} height={72} loading="lazy" decoding="async" className="h-full w-full object-cover" />
                               </div>
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
@@ -620,7 +623,7 @@ export default function ProfilePage() {
                     >
                       <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
                         <div className="h-32 w-full overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800 sm:h-20 sm:w-32 sm:shrink-0">
-                          <img src={optimizedCover(comment.video.coverUrl, 400)} alt={comment.video.title} loading="lazy" className="h-full w-full object-cover" />
+                           <img src={optimizedCover(comment.video.coverUrl, 400)} alt={comment.video.title} width={128} height={72} loading="lazy" decoding="async" className="h-full w-full object-cover" />
                         </div>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">

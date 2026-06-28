@@ -3,7 +3,7 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import { Repeat, Play, SkipBack, SkipForward } from "lucide-react";
 import { createRoot } from "react-dom/client";
-import { toHttps } from "@/lib/image";
+import { toHttps, optimizedCover } from "@/lib/image";
 
 type PlayMode = "loop" | "single" | "next";
 
@@ -300,7 +300,7 @@ export default function VideoPlayer({
           if (lr.ok) { const vs = await lr.json(); playlist = vs.map((v: any) => ({ name: v.title, source: toHttps(v.videoUrl) })); }
         } catch {}
 
-        const cfg: any = { id: cid, width: "100%", height: "100%", autoplay: shouldAutoPlay, preload: true, cover: initialVideo.coverUrl || "" };
+        const cfg: any = { id: cid, width: "100%", height: "100%", autoplay: shouldAutoPlay, preload: true, cover: optimizedCover(initialVideo.coverUrl, 1280) || "" };
 
         if (initialVideo.vodVideoId) {
           const res = await fetch("/api/vod", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "playAuth", videoId: initialVideo.vodVideoId }) });

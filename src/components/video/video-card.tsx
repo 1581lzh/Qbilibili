@@ -43,7 +43,10 @@ export default function VideoCard({ video, index = 0 }: { video: Video; index?: 
             <img
               src={optimizedCover(video.coverUrl)}
               alt={video.title}
+              width={640}
+              height={360}
               loading="lazy"
+              decoding="async"
               className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
             />
           ) : (

@@ -52,7 +52,7 @@ export default function Recommendations({ currentVideoId }: { currentVideoId: st
         >
           <div className="h-20 w-32 flex-shrink-0 overflow-hidden rounded bg-zinc-200 dark:bg-zinc-800">
             {v.coverUrl ? (
-              <img src={optimizedCover(v.coverUrl, 400)} alt="" loading="lazy" className="h-full w-full object-cover" />
+              <img src={optimizedCover(v.coverUrl, 400)} alt="" width={128} height={72} loading="lazy" decoding="async" className="h-full w-full object-cover" />
             ) : (
               <div className="flex h-full items-center justify-center text-xs text-zinc-400">
                 无封面
