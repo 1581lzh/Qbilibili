@@ -159,6 +159,13 @@
 - **个人主页标签动画** — 标签下划线 spring 滑动（layoutId）、标签内容 AnimatePresence 左右滑入滑出、hashchange 监听菜单切换、useRef 方向计算
 - **个人主页评论删除动画** — framer-motion layout 动画，删除时高度塌陷+淡出，剩余评论平滑上移
 - **头像菜单修复** — 修复菜单切换标签时 hashchange 双触发导致动画方向异常，移除多余 dispatchEvent
+- **毛玻璃效果** — 全站添加 glassmorphism 视觉效果
+  - Header 导航栏：`bg-white/80` 半透明背景（不使用 backdrop-blur，避免遮挡子元素模糊）
+  - 头像下拉菜单 / 搜索历史下拉：`backdrop-blur-xl bg-white/70` 直接模糊页面内容
+  - 登录/注册弹窗遮罩：独立模糊层（静态 backdrop-blur 4px）+ opacity 动画淡入淡出（0.4s）
+  - 确认弹窗遮罩：同上
+  - 管理页面确认弹窗：同上
+  - 技术方案：弹窗分离模糊层与内容层（blur 静态值 + opacity GPU 合成器动画）；下拉菜单 blur 直接作用于内容层（避免父级 backdrop-blur 合成层遮挡）
 
 ### 之前会话已完成的功能
 - 阿里云 OSS 接入 — 视频和封面上传到 OSS
