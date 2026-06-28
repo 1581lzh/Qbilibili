@@ -112,21 +112,40 @@ export default function CommentSection({ videoId }: { videoId: string }) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!content.trim() || loading) return;
+    const input = content;
+    const tempId = `temp-${Date.now()}`;
+    const tempComment: Comment = {
+      id: tempId,
+      content: input,
+      createdAt: new Date().toISOString(),
+      author: { id: session!.user!.id!, name: session!.user!.name || "我", avatar: null },
+      _count: { likes: 0, replies: 0 },
+      replies: [],
+    };
+    setComments((prev) => [tempComment, ...prev]);
+    setContent("");
     setLoading(true);
-    const res = await fetch(`/api/videos/${videoId}/comments`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content }),
-    });
-    if (res.ok) {
+    try {
+      const res = await fetch(`/api/videos/${videoId}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: input }),
+      });
+      if (!res.ok) throw new Error();
       const newComment = await res.json();
-      setComments((prev) => [
-        { ...newComment, _count: { likes: 0, replies: 0 }, replies: [] },
-        ...prev,
-      ]);
-      setContent("");
+      setComments((prev) =>
+        prev.map((c) =>
+          c.id === tempId
+            ? { ...newComment, _count: { likes: 0, replies: 0 }, replies: [] }
+            : c
+        )
+      );
+    } catch {
+      setComments((prev) => prev.filter((c) => c.id !== tempId));
+      setContent(input);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const replyExistsInTree = (replies: Reply[], id: string): boolean => {
@@ -147,31 +166,70 @@ export default function CommentSection({ videoId }: { videoId: string }) {
 
   const handleReply = async (parentId: string) => {
     if (!replyContent.trim() || replyLoading) return;
+    const input = replyContent;
+    const tempId = `temp-reply-${Date.now()}`;
+    const tempReply: Reply = {
+      id: tempId,
+      content: input,
+      createdAt: new Date().toISOString(),
+      author: { id: session!.user!.id!, name: session!.user!.name || "我", avatar: null },
+      _count: { likes: 0, replies: 0 },
+      replies: [],
+    };
+    const addTempReply = (replies: Reply[], pid: string): Reply[] =>
+      replies.map((r) => {
+        if (r.id === pid) return { ...r, replies: [...(r.replies || []), tempReply], _count: { ...r._count, replies: r._count.replies + 1 } };
+        if (r.replies?.length) return { ...r, replies: addTempReply(r.replies, pid) };
+        return r;
+      });
+    setComments((prev) =>
+      prev.map((c) => {
+        if (c.id === parentId) return { ...c, replies: [...c.replies, tempReply], _count: { ...c._count, replies: c._count.replies + 1 } };
+        if (replyExistsInTree(c.replies, parentId)) return { ...c, replies: addTempReply(c.replies, parentId), _count: { ...c._count, replies: c._count.replies + 1 } };
+        return c;
+      })
+    );
+    setReplyContent("");
+    setReplyTo(null);
+    setReplyTargetName("");
     setReplyLoading(true);
-    const res = await fetch(`/api/videos/${videoId}/comments`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: replyContent, parentId }),
-    });
-    if (res.ok) {
+    try {
+      const res = await fetch(`/api/videos/${videoId}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: input, parentId }),
+      });
+      if (!res.ok) throw new Error();
       const newReply = await res.json();
       const replyData = { ...newReply, _count: { likes: 0, replies: 0 }, replies: [] };
+      const replaceTemp = (replies: Reply[]): Reply[] =>
+        replies.map((r) => {
+          if (r.id === tempId) return replyData;
+          if (r.replies?.length) return { ...r, replies: replaceTemp(r.replies) };
+          return r;
+        });
       setComments((prev) =>
         prev.map((c) => {
-          if (c.id === parentId) {
-            return { ...c, replies: [...c.replies, replyData], _count: { ...c._count, replies: c._count.replies + 1 } };
-          }
-          if (replyExistsInTree(c.replies, parentId)) {
-            return { ...c, replies: addReplyToTree(c.replies, parentId, replyData), _count: { ...c._count, replies: c._count.replies + 1 } };
-          }
+          if (c.id === parentId) return { ...c, replies: replaceTemp(c.replies) };
+          if (replyExistsInTree(c.replies, parentId)) return { ...c, replies: replaceTemp(c.replies) };
           return c;
         })
       );
-      setReplyContent("");
-      setReplyTo(null);
-      setReplyTargetName("");
+    } catch {
+      const removeTemp = (replies: Reply[]): Reply[] =>
+        replies.filter((r) => r.id !== tempId).map((r) => r.replies?.length ? { ...r, replies: removeTemp(r.replies) } : r);
+      setComments((prev) =>
+        prev.map((c) => {
+          if (c.id === parentId) return { ...c, replies: removeTemp(c.replies), _count: { ...c._count, replies: c._count.replies - 1 } };
+          if (replyExistsInTree(c.replies, parentId)) return { ...c, replies: removeTemp(c.replies), _count: { ...c._count, replies: c._count.replies - 1 } };
+          return c;
+        })
+      );
+      setReplyContent(input);
+      setReplyTo(parentId);
+    } finally {
+      setReplyLoading(false);
     }
-    setReplyLoading(false);
   };
 
   const handleDelete = async (commentId: string) => {
@@ -212,40 +270,31 @@ export default function CommentSection({ videoId }: { videoId: string }) {
       }));
   };
 
-  const handleLikeComment = async (commentId: string, isReply: boolean, parentId?: string) => {
+  const handleLikeComment = async (commentId: string, isReply: boolean) => {
     if (!session?.user) return;
-    const res = await fetch(`/api/videos/${videoId}/comments/like`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ commentId }),
-    });
-    if (res.ok) {
-      const data = await res.json();
+    const wasLiked = isReply ? likedReplyIds.has(commentId) : likedCommentIds.has(commentId);
+    const newLiked = !wasLiked;
+    if (isReply) {
+      setLikedReplyIds((prev) => { const n = new Set(prev); newLiked ? n.add(commentId) : n.delete(commentId); return n; });
+      setComments((prev) => prev.map((c) => ({ ...c, replies: updateReplyLike(c.replies, commentId, newLiked) })));
+    } else {
+      setLikedCommentIds((prev) => { const n = new Set(prev); newLiked ? n.add(commentId) : n.delete(commentId); return n; });
+      setComments((prev) => prev.map((c) => c.id === commentId ? { ...c, _count: { ...c._count, likes: c._count.likes + (newLiked ? 1 : -1) } } : c));
+    }
+    try {
+      const res = await fetch(`/api/videos/${videoId}/comments/like`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commentId }),
+      });
+      if (!res.ok) throw new Error();
+    } catch {
       if (isReply) {
-        setLikedReplyIds((prev) => {
-          const next = new Set(prev);
-          if (data.liked) { next.add(commentId); } else { next.delete(commentId); }
-          return next;
-        });
-        setComments((prev) =>
-          prev.map((c) => ({
-            ...c,
-            replies: updateReplyLike(c.replies, commentId, data.liked),
-          }))
-        );
+        setLikedReplyIds((prev) => { const n = new Set(prev); wasLiked ? n.add(commentId) : n.delete(commentId); return n; });
+        setComments((prev) => prev.map((c) => ({ ...c, replies: updateReplyLike(c.replies, commentId, wasLiked) })));
       } else {
-        setLikedCommentIds((prev) => {
-          const next = new Set(prev);
-          if (data.liked) { next.add(commentId); } else { next.delete(commentId); }
-          return next;
-        });
-        setComments((prev) =>
-          prev.map((c) =>
-            c.id === commentId
-              ? { ...c, _count: { ...c._count, likes: c._count.likes + (data.liked ? 1 : -1) } }
-              : c
-          )
-        );
+        setLikedCommentIds((prev) => { const n = new Set(prev); wasLiked ? n.add(commentId) : n.delete(commentId); return n; });
+        setComments((prev) => prev.map((c) => c.id === commentId ? { ...c, _count: { ...c._count, likes: c._count.likes + (wasLiked ? 1 : -1) } } : c));
       }
     }
   };

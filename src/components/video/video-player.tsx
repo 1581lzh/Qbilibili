@@ -4,6 +4,7 @@ import { useRef, useState, useEffect, useCallback } from "react";
 import { Repeat, Play, SkipBack, SkipForward } from "lucide-react";
 import { createRoot } from "react-dom/client";
 import { toHttps, optimizedCover } from "@/lib/image";
+import { cachedFetch } from "@/lib/fetch-cache";
 
 type PlayMode = "loop" | "single" | "next";
 
@@ -296,16 +297,25 @@ export default function VideoPlayer({
 
         let playlist: { name: string; source: string }[] = [];
         try {
-          const lr = await fetch("/api/videos?limit=50");
-          if (lr.ok) { const vs = await lr.json(); playlist = vs.map((v: any) => ({ name: v.title, source: toHttps(v.videoUrl) })); }
+          const vs = await cachedFetch("/api/videos?limit=20", 300000) as any[];
+          playlist = vs.map((v) => ({ name: v.title, source: toHttps(v.videoUrl) }));
         } catch {}
 
         const cfg: any = { id: cid, width: "100%", height: "100%", autoplay: shouldAutoPlay, preload: true, cover: optimizedCover(initialVideo.coverUrl, 1280) || "" };
 
         if (initialVideo.vodVideoId) {
-          const res = await fetch("/api/vod", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "playAuth", videoId: initialVideo.vodVideoId }) });
-          if (!res.ok) return;
-          const { playAuth } = await res.json();
+          const vodCache = (globalThis as any).__vodAuthCache as Map<string, { auth: string; expires: number }> | undefined || ((globalThis as any).__vodAuthCache = new Map());
+          const cached = vodCache.get(initialVideo.vodVideoId);
+          let playAuth: string;
+          if (cached && cached.expires > Date.now()) {
+            playAuth = cached.auth;
+          } else {
+            const res = await fetch("/api/vod", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "playAuth", videoId: initialVideo.vodVideoId }) });
+            if (!res.ok) return;
+            const data = await res.json();
+            playAuth = data.playAuth;
+            vodCache.set(initialVideo.vodVideoId, { auth: playAuth, expires: Date.now() + 60000 });
+          }
           cfg.vid = initialVideo.vodVideoId; cfg.playauth = playAuth;
         } else if (initialVideo.videoUrl) {
           cfg.source = toHttps(initialVideo.videoUrl);

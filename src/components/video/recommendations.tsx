@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { optimizedCover } from "@/lib/image";
+import { cachedFetch } from "@/lib/fetch-cache";
 
 interface Video {
   id: string;
@@ -17,12 +18,8 @@ export default function Recommendations({ currentVideoId }: { currentVideoId: st
 
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/videos/recommendations?currentVideoId=${currentVideoId}`)
-      .then((r) => r.json())
-      .then((data) => {
-        setVideos(data);
-        setLoading(false);
-      })
+    cachedFetch(`/api/videos/recommendations?currentVideoId=${currentVideoId}`, 60000)
+      .then((data) => { setVideos(data as Video[]); setLoading(false); })
       .catch(() => setLoading(false));
   }, [currentVideoId]);
 

@@ -2,13 +2,44 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
 import VideoPlayer from "@/components/video/video-player";
 import VideoLikeButton from "@/components/video/video-like-button";
 import VideoFavoriteButton from "@/components/video/video-favorite-button";
 import VideoDeleteButton from "@/components/video/video-delete-button";
-import Recommendations from "@/components/video/recommendations";
-import CommentSection from "@/components/video/comment-section";
+
+const Recommendations = dynamic(() => import("@/components/video/recommendations"), {
+  loading: () => (
+    <div className="space-y-4">
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="flex gap-2 animate-pulse">
+          <div className="h-20 w-32 flex-shrink-0 rounded bg-zinc-200 dark:bg-zinc-800" />
+          <div className="flex-1 space-y-2 py-1">
+            <div className="h-4 w-3/4 rounded bg-zinc-200 dark:bg-zinc-800" />
+            <div className="h-3 w-1/2 rounded bg-zinc-200 dark:bg-zinc-800" />
+          </div>
+        </div>
+      ))}
+    </div>
+  ),
+});
+
+const CommentSection = dynamic(() => import("@/components/video/comment-section"), {
+  loading: () => (
+    <div className="space-y-3">
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="animate-pulse rounded-lg border border-zinc-200 p-3 dark:border-zinc-800 sm:p-4">
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-8 rounded-full bg-zinc-200 dark:bg-zinc-800" />
+            <div className="h-4 w-16 rounded bg-zinc-200 dark:bg-zinc-800" />
+          </div>
+          <div className="mt-2 h-4 w-full rounded bg-zinc-200 dark:bg-zinc-800" />
+        </div>
+      ))}
+    </div>
+  ),
+});
 
 interface VideoInfo {
   id: string;

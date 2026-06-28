@@ -44,11 +44,15 @@ H:\bilibili/
 │   │   │   └── register/      # 注册页
 │   │   ├── (main)/            # 主要路由组
 │   │   │   ├── layout.tsx     # 主布局
+│   │   │   ├── loading.tsx    # 首页骨架屏（页面导航过渡）
 │   │   │   ├── page.tsx       # 首页（视频卡片网格布局）
 │   │   │   ├── upload/        # 上传页
 │   │   │   ├── profile/       # 个人主页（账号设置/收藏/点赞/评论）
+│   │   │   │   └── loading.tsx # 个人中心骨架屏
 │   │   │   ├── search/        # 搜索结果页（视频/评论切换）
+│   │   │   │   └── loading.tsx # 搜索页骨架屏
 │   │   │   ├── video/[id]/    # 视频播放页
+│   │   │   │   └── loading.tsx # 播放页骨架屏
 │   │   │   └── user/[id]/     # 公共用户主页（他人投稿/信息）
 │   │   └── api/               # API 路由
 │   │       ├── auth/          # NextAuth 认证
@@ -81,22 +85,22 @@ H:\bilibili/
 │   ├── components/            # React 组件
 │   │   ├── auth/              # 认证相关组件
 │   │   │   ├── auth-modal-context.tsx  # 认证弹窗 Context（登录/注册模式切换）
-│   │   │   └── auth-modal.tsx          # 认证弹窗组件（Tab 切换登录/注册）
+│   │   │   └── auth-modal.tsx          # 认证弹窗组件（next/dynamic 懒加载）
 │   │   ├── ui/                # 通用 UI 组件
 │   │   │   └── confirm-dialog.tsx      # 确认弹窗组件（替代浏览器 confirm/alert）
 │   │   ├── layout/            # 布局组件
 │   │   │   └── header.tsx     # 页头组件（移动端搜索展开动画/深色切换/头像菜单）
-│   │   ├── providers.tsx      # 全局 Provider（SessionProvider + ThemeProvider + AuthModalProvider）
+│   │   ├── providers.tsx      # 全局 Provider（AuthModal 通过 next/dynamic 懒加载）
 │   │   ├── theme-provider.tsx # 深色模式 Provider（light/dark/system）
 │   │   └── video/             # 视频相关组件
 │   │       ├── video-card.tsx             # 视频卡片（同名同色头像）
-│   │       ├── video-player.tsx           # 视频播放器（Aliplayer，桌面端单击/移动端双击暂停）
-│   │       ├── video-play-section.tsx     # 视频播放区域（含作者信息+推荐列表）
-│   │       ├── video-like-button.tsx      # 点赞按钮（服务端初始状态）
-│   │       ├── video-favorite-button.tsx  # 收藏按钮（金色星形）
+│   │       ├── video-player.tsx           # 视频播放器（Aliplayer + 播放列表缓存）
+│   │       ├── video-play-section.tsx     # 视频播放区域（CommentSection/Recommendations 动态导入）
+│   │       ├── video-like-button.tsx      # 点赞按钮（乐观更新，即时响应）
+│   │       ├── video-favorite-button.tsx  # 收藏按钮（乐观更新，即时响应）
 │   │       ├── video-delete-button.tsx    # 删除视频按钮
-│   │       ├── recommendations.tsx        # 推荐列表（客户端组件）
-│   │       └── comment-section.tsx        # 评论区（回车发送）
+│   │       ├── recommendations.tsx        # 推荐列表（cachedFetch 客户端缓存）
+│   │       └── comment-section.tsx        # 评论区（乐观更新 + 回车发送）
 │   ├── lib/                   # 工具函数
 │   │   ├── auth.ts            # NextAuth 配置 + getSession() 安全封装
 │   │   ├── db.ts              # Prisma 客户端
@@ -106,7 +110,8 @@ H:\bilibili/
 │   │   ├── csrf.ts            # CSRF 防护（Origin/Referer 校验）
 │   │   ├── rate-limit.ts      # 内存速率限制器
 │   │   ├── password.ts        # 密码哈希工具（bcryptjs）
-│   │   └── image.ts           # 图片/URL 优化工具（toHttps + OSS 图片处理参数生成）
+│   │   ├── image.ts           # 图片/URL 优化工具（toHttps + OSS 图片处理参数生成）
+│   │   └── fetch-cache.ts     # 客户端 fetch 缓存工具（TTL + Map 缓存，替代裸 fetch）
 │   ├── types/                 # TypeScript 类型定义
 │   │   └── index.ts           # 共享类型（Video/VideoWithAuthor/Comment/Reply 等）
 │   └── generated/             # Prisma 生成的客户端
@@ -227,6 +232,15 @@ H:\bilibili/
 - 未上传封面时使用本地 `public/placeholder.svg` 占位图（消除外部依赖）
 - 封面宽度：首页/用户页 640px，推荐栏/评论缩略图 400px，管理面板 300px，Aliplayer 播放器封面 1280px
 
+### 弱网交互优化
+- **乐观更新** — 点赞、收藏、评论、回复、评论点赞全部采用乐观更新策略（点击后立即更新 UI，失败时回滚），弱网下操作响应从 1-3 秒延迟降为 0 延迟
+- **页面骨架屏** — 首页、视频播放页、个人中心、搜索页各有独立的 `loading.tsx` 骨架屏（animate-pulse 动画），页面导航时立即显示页面结构
+- **代码分割** — `CommentSection`、`Recommendations`、`AuthModal` 通过 `next/dynamic` 懒加载，视频播放页首屏 JS 减少约 30%
+- **播放器预加载** — `layout.tsx` 中 Aliplayer CDN 添加 `<link rel="preload" as="script">`，提前加载播放器脚本
+- **API 缓存头** — `next.config.ts` 为推荐视频（60s + stale-while-revalidate 300s）、视频详情（30s + 120s）、静态资源（1年 immutable）设置 Cache-Control
+- **客户端 fetch 缓存** — `src/lib/fetch-cache.ts` 提供 `cachedFetch(url, ttlMs)` 工具函数，推荐列表 60 秒缓存、播放列表 5 分钟缓存、VOD playAuth 60 秒缓存
+- **播放列表减量** — 播放列表从 50 条减为 20 条，减少首屏传输体积
+
 ### VOD 视频点播
 - `POST /api/vod` — VOD 鉴权 API
   - `action: "create"` — 获取上传凭证（需要 title、fileName）
@@ -300,13 +314,16 @@ VOD_SPACE_NAME=your-vod-space-name
 - 扩展名白名单：mp4/webm/mov/avi/flv/mkv（视频）、jpg/jpeg/png/gif/webp/bmp（图片）
 - 文件名由服务端生成（`timestamp_random.ext`），不使用原始文件名
 
-### 安全响应头（next.config.ts）
+### 安全响应头 + 缓存头（next.config.ts）
 - `X-Content-Type-Options: nosniff` — 禁止 MIME 类型嗅探
 - `X-Frame-Options: DENY` — 禁止 iframe 嵌入
 - `X-XSS-Protection: 1; mode=block` — 启用浏览器 XSS 过滤
 - `Referrer-Policy: strict-origin-when-cross-origin` — 控制 Referer 信息
 - `Permissions-Policy: camera=(), microphone=(), geolocation=()` — 禁用敏感 API
 - 未启用 CSP — 与阿里云 Aliplayer VOD 播放器不兼容（VOD 流媒体 CDN 域名动态变化）
+- `/api/videos/recommendations` — `Cache-Control: public, s-maxage=60, stale-while-revalidate=300`（推荐视频 60s 缓存）
+- `/api/videos/:path*/detail` — `Cache-Control: public, s-maxage=30, stale-while-revalidate=120`（视频详情 30s 缓存）
+- `/lib/(.*)` — `Cache-Control: public, max-age=31536000, immutable`（静态资源长期缓存）
 
 ### 错误信息脱敏
 - 生产环境 API 错误不返回原始错误详情

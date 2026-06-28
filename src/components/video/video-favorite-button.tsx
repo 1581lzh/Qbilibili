@@ -20,14 +20,24 @@ export default function VideoFavoriteButton({
 
   const handleFavorite = async () => {
     if (!session?.user || loading) return;
+    const prevFavorited = favorited;
+    const prevCount = count;
+    const newFavorited = !prevFavorited;
+    setFavorited(newFavorited);
+    setCount((c) => (newFavorited ? c + 1 : c - 1));
     setLoading(true);
-    const res = await fetch(`/api/videos/${videoId}/favorite`, { method: "POST" });
-    if (res.ok) {
+    try {
+      const res = await fetch(`/api/videos/${videoId}/favorite`, { method: "POST" });
+      if (!res.ok) throw new Error();
       const data = await res.json();
       setFavorited(data.favorited);
-      setCount((prev) => (data.favorited ? prev + 1 : prev - 1));
+      setCount((c) => (data.favorited ? prevCount + 1 : prevCount - 1));
+    } catch {
+      setFavorited(prevFavorited);
+      setCount(prevCount);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (

@@ -17,6 +17,8 @@ export default function RootLayout({
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
         <link rel="preconnect" href="https://lolpk.oss-cn-guangzhou.aliyuncs.com" />
         <link rel="dns-prefetch" href="https://lolpk.oss-cn-guangzhou.aliyuncs.com" />
+        <link rel="preconnect" href="https://g.alicdn.com" />
+        <link rel="preload" as="script" href="https://g.alicdn.com/apsara-media-box/imp-web-player/2.25.1/aliplayer-min.js" />
         <script
           dangerouslySetInnerHTML={{
             __html: `

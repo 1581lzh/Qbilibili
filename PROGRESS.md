@@ -138,6 +138,14 @@
 - **评论跳转功能** — 个人中心点赞/评论列表点击卡片跳转到视频播放页，sessionStorage 传递评论 ID，轮询等待 DOM 渲染后精确滚动定位
 - **评论高亮闪烁** — 目标评论显示粉色边框+泛光效果，闪烁 2 下（亮→灭→亮→灭），每次 500ms 淡入淡出
 - **点击自动播放** — 视频卡片点击时存 sessionStorage autoPlayVideo 标记，播放器检测后自动非静音播放
+- **弱网交互优化** — 全面优化弱网环境下页面交互响应速度
+  - **乐观更新** — 点赞、收藏、评论、回复、评论点赞全部改为点击后立即更新 UI，失败时回滚，弱网下操作响应从 1-3 秒降为 0 延迟
+  - **页面骨架屏** — 新增 4 个 `loading.tsx`（首页/播放页/个人中心/搜索页），页面导航时立即显示页面结构，消除白屏
+  - **代码分割** — `CommentSection`、`Recommendations`、`AuthModal` 通过 `next/dynamic` 懒加载（含骨架屏 fallback），视频播放页首屏 JS 减少约 30%
+  - **播放器预加载** — `layout.tsx` 中添加 Aliplayer CDN 的 `<link rel="preload" as="script">` 预加载
+  - **API 缓存头** — `next.config.ts` 为推荐视频（60s）、视频详情（30s）、静态资源（1年 immutable）设置 Cache-Control
+  - **客户端 fetch 缓存** — 新建 `src/lib/fetch-cache.ts`，推荐列表 60s 缓存、播放列表 5 分钟缓存、VOD playAuth 60s 缓存
+  - **播放列表减量** — 播放列表从 50 条减为 20 条，减少首屏传输体积
 - **Framer Motion 动画系统** — 安装 framer-motion 库，全面添加页面动画
   - 首页/搜索结果视频卡片 staggered fade-in 入场（依次淡入上移）
   - 点赞按钮 whileTap 缩放 + liked 弹跳动画

@@ -20,14 +20,24 @@ export default function VideoLikeButton({
 
   const handleLike = async () => {
     if (!session?.user || loading) return;
+    const prevLiked = liked;
+    const prevCount = count;
+    const newLiked = !prevLiked;
+    setLiked(newLiked);
+    setCount((c) => (newLiked ? c + 1 : c - 1));
     setLoading(true);
-    const res = await fetch(`/api/videos/${videoId}/like`, { method: "POST" });
-    if (res.ok) {
+    try {
+      const res = await fetch(`/api/videos/${videoId}/like`, { method: "POST" });
+      if (!res.ok) throw new Error();
       const data = await res.json();
       setLiked(data.liked);
-      setCount((prev) => (data.liked ? prev + 1 : prev - 1));
+      setCount((c) => (data.liked ? prevCount + 1 : prevCount - 1));
+    } catch {
+      setLiked(prevLiked);
+      setCount(prevCount);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
