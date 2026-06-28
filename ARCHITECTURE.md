@@ -57,7 +57,6 @@ H:\bilibili/
 │   │   └── api/               # API 路由
 │   │       ├── auth/          # NextAuth 认证
 │   │       │   └── [...nextauth]/ # NextAuth 路由处理
-│   │       │   └── custom-signout/ # 自定义退出登录（绕过NextAuth重定向）
 │   │       ├── register/      # 用户注册
 │   │       ├── search/        # 搜索 API（视频/评论，任意字符匹配）
 │   │       ├── user/          # 用户相关 API
@@ -598,7 +597,7 @@ sudo firewall-cmd --reload
 - 当前用于用户注销确认
 
 ### 退出登录跳转
-- Header 退出登录：调用 `/api/auth/custom-signout` 清除 cookie 后 `window.location.reload()`
+- Header 退出登录：调用 NextAuth 内置 `signOut({ callbackUrl: "/" })`，由 NextAuth 正确清除所有 cookie（匹配 httpOnly/secure/sameSite 属性）
 - 个人主页未登录检测：自动跳转首页 `/`（非 login 页面）
 
 ### 收藏按钮优化

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useSession } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { Search, Sun, Moon, X } from "lucide-react";
@@ -454,7 +454,7 @@ export function Header() {
                       用户设置
                     </a>
                     <button
-                      onClick={async () => { await fetch("/api/auth/custom-signout", { method: "POST" }); window.location.reload(); }}
+                      onClick={() => { signOut({ callbackUrl: "/" }); }}
                       className="flex w-full items-center gap-2 px-3 py-2 text-sm text-red-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
                     >
                       <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} className="h-4 w-4">

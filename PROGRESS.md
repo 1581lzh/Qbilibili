@@ -67,7 +67,7 @@
 - **会话安全** — JWT 7 天有效期，User 新增 `tokenVersion` 字段，修改密码时递增使旧会话失效
 - **敏感信息防护** — API 不返回密码/密钥/堆栈信息，生产环境错误脱敏，无 SSRF/命令注入攻击面
 - **已删除用户 token 撤销** — JWT 回调中用户不存在时自动标记 token_revoked，防止已删除用户残留登录状态
-- **退出登录跳转修复** — 新增 `/api/auth/custom-signout` 自定义 API，绕过 NextAuth 服务端重定向，正确清除 authjs.* cookie，使用当前页面地址跳转
+- **退出登录跳转修复** — 改用 NextAuth 内置 `signOut({ callbackUrl: "/" })` 替代自定义 API，正确匹配 cookie 属性（httpOnly/secure/sameSite），解决生产环境 HTTPS 下退出登录失效问题
 - **个人主页错误处理** — API 返回错误时自动跳转首页，防止 null 数据崩溃
 
 ### 本次会话新增/修复

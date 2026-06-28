@@ -1,6 +1,6 @@
 "use client";
 
-import { useSession } from "next-auth/react";
+import { useSession, signOut } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
@@ -213,7 +213,7 @@ export default function ProfilePage() {
       body: JSON.stringify({ password: confirmPassword }),
     });
     if (res.ok) {
-      await fetch("/api/auth/custom-signout", { method: "POST" });
+      await signOut({ redirect: false });
       window.location.href = "/";
     } else {
       const data = await res.json();
