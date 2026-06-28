@@ -79,15 +79,24 @@ export function AuthModal() {
   return (
     <AnimatePresence>
       {open && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4"
-          onClick={close}
-        >
-          <div className="relative w-full max-w-md">
+        <>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+            className="fixed inset-0 z-[100]"
+            style={{ backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", backgroundColor: "rgba(0,0,0,0.5)" }}
+          />
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+            className="fixed inset-0 z-[101] flex items-center justify-center px-4"
+            onClick={close}
+          >
+            <div className="relative w-full max-w-md">
             <button
               onClick={close}
               className="absolute -right-3 -top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full bg-white text-zinc-400 shadow-md hover:text-zinc-700 dark:bg-zinc-800 dark:text-zinc-500 dark:hover:text-zinc-200"
@@ -211,6 +220,7 @@ export function AuthModal() {
           </motion.div>
           </div>
         </motion.div>
+        </>
       )}
     </AnimatePresence>
   );

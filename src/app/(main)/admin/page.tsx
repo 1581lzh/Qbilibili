@@ -337,28 +337,39 @@ export default function AdminPage() {
 
       <AnimatePresence>
         {confirmAction && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-            onClick={() => setConfirmAction(null)}
-          >
+          <>
             <motion.div
-              initial={{ scale: 0.95 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.95 }}
-              onClick={(e) => e.stopPropagation()}
-              className="mx-4 w-full max-w-sm rounded-lg border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-700 dark:bg-zinc-800"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.4, ease: [0.4, 0, 0.2, 1] }}
+              className="fixed inset-0 z-50"
+              style={{ backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", backgroundColor: "rgba(0,0,0,0.5)" }}
+            />
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.35, ease: [0.4, 0, 0.2, 1] }}
+              className="fixed inset-0 z-[51] flex items-center justify-center"
+              onClick={() => setConfirmAction(null)}
             >
-              <p className="mb-2 text-lg font-medium text-zinc-900 dark:text-zinc-100">确认删除</p>
-              <p className="mb-4 text-sm text-zinc-500">确定要删除「{confirmAction.name}」吗？此操作不可撤销。</p>
-              <div className="flex justify-end gap-2">
-                <button onClick={() => setConfirmAction(null)} className="rounded-md px-4 py-2 text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-700">取消</button>
-                <button onClick={handleDelete} className="rounded-md bg-red-500 px-4 py-2 text-sm text-white hover:bg-red-600">确认删除</button>
-              </div>
+              <motion.div
+                initial={{ scale: 0.95 }}
+                animate={{ scale: 1 }}
+                exit={{ scale: 0.95 }}
+                onClick={(e) => e.stopPropagation()}
+                className="mx-4 w-full max-w-sm rounded-lg border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-700 dark:bg-zinc-800"
+              >
+                <p className="mb-2 text-lg font-medium text-zinc-900 dark:text-zinc-100">确认删除</p>
+                <p className="mb-4 text-sm text-zinc-500">确定要删除「{confirmAction.name}」吗？此操作不可撤销。</p>
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => setConfirmAction(null)} className="rounded-md px-4 py-2 text-sm text-zinc-600 hover:bg-zinc-100 dark:text-zinc-300 dark:hover:bg-zinc-700">取消</button>
+                  <button onClick={handleDelete} className="rounded-md bg-red-500 px-4 py-2 text-sm text-white hover:bg-red-600">确认删除</button>
+                </div>
+              </motion.div>
             </motion.div>
-          </motion.div>
+          </>
         )}
       </AnimatePresence>
     </div>

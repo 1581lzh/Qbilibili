@@ -208,7 +208,7 @@ export function Header() {
   const avatarColor = AVATAR_COLORS[hash % AVATAR_COLORS.length];
 
   return (
-    <header className="sticky top-0 z-50 border-b border-zinc-200 bg-white dark:border-zinc-800 dark:bg-black">
+    <header className="sticky top-0 z-50 border-b border-zinc-200 bg-white/80 backdrop-blur-lg dark:border-zinc-800 dark:bg-black/80">
       <div className="relative mx-auto flex h-14 max-w-7xl items-center justify-between px-3 sm:px-4">
         <Link href="/" className="flex shrink-0 items-center gap-2 sm:pointer-events-auto">
           <motion.span
@@ -286,7 +286,7 @@ export function Header() {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
                     transition={{ duration: 0.15 }}
-                    className="absolute left-0 top-full z-50 mt-1 w-full rounded-md border border-zinc-200 bg-white p-2 shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+                    className="absolute left-0 top-full z-50 mt-1 w-full rounded-md border border-zinc-200 bg-white/90 p-2 shadow-lg backdrop-blur-md dark:border-zinc-700 dark:bg-zinc-900/90"
                   >
                     <div className="mb-2 flex items-center justify-between">
                       <span className="text-xs font-medium text-zinc-500">搜索历史</span>
@@ -366,7 +366,7 @@ export function Header() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -10, scale: 0.95 }}
                     transition={{ duration: 0.15 }}
-                    className="absolute right-0 top-10 w-44 rounded-lg border border-zinc-200 bg-white py-1 shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+                    className="absolute right-0 top-10 w-44 rounded-lg border border-zinc-200 bg-white/90 py-1 shadow-lg backdrop-blur-md dark:border-zinc-700 dark:bg-zinc-900/90"
                     onMouseEnter={cancelHide}
                     onMouseLeave={hideMenu}
                   >
