@@ -68,6 +68,7 @@
 - **敏感信息防护** — API 不返回密码/密钥/堆栈信息，生产环境错误脱敏，无 SSRF/命令注入攻击面
 - **已删除用户 token 撤销** — JWT 回调中用户不存在时自动标记 token_revoked，防止已删除用户残留登录状态
 - **退出登录跳转修复** — 改用 NextAuth 内置 `signOut({ callbackUrl: "/" })` 替代自定义 API，正确匹配 cookie 属性（httpOnly/secure/sameSite），解决生产环境 HTTPS 下退出登录失效问题
+- **退出登录跳转地址修复** — `.env` 补充 `NEXTAUTH_URL=http://localhost:3005`，修复退出登录时跳转到 `https://0.0.0.0:3005/` 的问题（缺少该配置时 NextAuth 从服务器绑定地址推导绝对 URL）
 - **个人主页错误处理** — API 返回错误时自动跳转首页，防止 null 数据崩溃
 
 ### 本次会话新增/修复
