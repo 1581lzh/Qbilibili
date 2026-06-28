@@ -208,7 +208,7 @@ export function Header() {
   const avatarColor = AVATAR_COLORS[hash % AVATAR_COLORS.length];
 
   return (
-    <header className="sticky top-0 z-50 border-b border-zinc-200 bg-white/80 backdrop-blur-lg dark:border-zinc-800 dark:bg-black/80">
+    <header className="sticky top-0 z-50 border-b border-zinc-200 bg-white/80 dark:border-zinc-800 dark:bg-black/80">
       <div className="relative mx-auto flex h-14 max-w-7xl items-center justify-between px-3 sm:px-4">
         <Link href="/" className="flex shrink-0 items-center gap-2 sm:pointer-events-auto">
           <motion.span
