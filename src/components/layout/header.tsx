@@ -281,13 +281,19 @@ export function Header() {
 
               <AnimatePresence>
                 {searchFocused && searchHistory.length > 0 && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -4 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -4 }}
-                    transition={{ duration: 0.15 }}
-                    className="absolute left-0 top-full z-50 mt-1 w-full rounded-md border border-zinc-200 bg-white/90 p-2 shadow-lg backdrop-blur-md dark:border-zinc-700 dark:bg-zinc-900/90"
-                  >
+                  <>
+                    <div
+                      className="absolute left-0 top-full z-50 mt-1 w-full rounded-md border border-zinc-200 p-2 shadow-lg backdrop-blur-xl dark:border-zinc-700"
+                      style={{ backgroundColor: "rgba(255,255,255,0.75)" }}
+                    >
+                    </div>
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute left-0 top-full z-[51] mt-1 w-full rounded-md border border-zinc-200 p-2 shadow-lg dark:border-zinc-700"
+                    >
                     <div className="mb-2 flex items-center justify-between">
                       <span className="text-xs font-medium text-zinc-500">搜索历史</span>
                       <button
@@ -314,6 +320,7 @@ export function Header() {
                       ))}
                     </div>
                   </motion.div>
+                  </>
                 )}
               </AnimatePresence>
             </div>
@@ -361,15 +368,23 @@ export function Header() {
                 </Link>
                 <AnimatePresence>
                 {open && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                    transition={{ duration: 0.15 }}
-                    className="absolute right-0 top-10 w-44 rounded-lg border border-zinc-200 bg-white/90 py-1 shadow-lg backdrop-blur-md dark:border-zinc-700 dark:bg-zinc-900/90"
-                    onMouseEnter={cancelHide}
-                    onMouseLeave={hideMenu}
-                  >
+                  <>
+                    <div
+                      className="absolute right-0 top-10 z-50 w-44 rounded-lg border border-zinc-200 py-1 shadow-lg backdrop-blur-xl dark:border-zinc-700"
+                      style={{ backgroundColor: "rgba(255,255,255,0.75)" }}
+                      onMouseEnter={cancelHide}
+                      onMouseLeave={hideMenu}
+                    >
+                    </div>
+                    <motion.div
+                      initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute right-0 top-10 z-[51] w-44 rounded-lg border border-zinc-200 py-1 shadow-lg dark:border-zinc-700"
+                      onMouseEnter={cancelHide}
+                      onMouseLeave={hideMenu}
+                    >
                     <div className="border-b border-zinc-100 px-3 py-2 dark:border-zinc-800">
                       <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                         {session.user.name}
@@ -463,6 +478,7 @@ export function Header() {
                       退出登录
                     </button>
                   </motion.div>
+                  </>
                 )}
                 </AnimatePresence>
               </div>
