@@ -235,8 +235,10 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration }: { imageUrls: str
       }
       setIsPlaying(!isPlaying);
     } else if (audioUrls.length > 0) {
-      setIsPlaying(true);
-      showTempIndicator("pause");
+      // Audio element not yet loaded, but URLs exist - toggle state
+      const newPlaying = !isPlaying;
+      setIsPlaying(newPlaying);
+      showTempIndicator(newPlaying ? "pause" : "play");
     } else {
       const newPlaying = !isPlaying;
       setIsPlaying(newPlaying);
