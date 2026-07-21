@@ -673,7 +673,7 @@ export default function VideoPlaySection({
             <span>{new Date(state.video.createdAt).toLocaleDateString("zh-CN")}</span>
           </div>
           {state.video.description && (
-            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400 sm:mt-3 sm:text-base">
+            <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-600 dark:text-zinc-400 sm:mt-3 sm:text-base">
               {state.video.description}
             </p>
           )}
