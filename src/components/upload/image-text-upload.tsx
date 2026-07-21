@@ -15,8 +15,8 @@ interface ImageTextUploadPageProps {
   setImages: React.Dispatch<React.SetStateAction<{ file: File; preview: string }[]>>;
   music: { file: File; preview: string }[];
   setMusic: React.Dispatch<React.SetStateAction<{ file: File; preview: string }[]>>;
-  imageDuration: number;
-  setImageDuration: (v: number) => void;
+  imageDuration: number | null;
+  setImageDuration: (v: number | null) => void;
   loading: boolean;
   uploadProgress: number;
   uploadStatus: string;
@@ -616,21 +616,57 @@ export function ImageTextUploadPage({
         {images.length > 1 && (
           <div>
             <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              图片预览时长（秒）
+              图片预览时长
             </label>
             <div className="flex items-center gap-3">
-              <input
-                type="number"
-                min={1}
-                max={30}
-                value={imageDuration}
-                onChange={(e) => setImageDuration(Math.max(1, Math.min(30, parseInt(e.target.value) || 1)))}
-                className="w-20 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"
-              />
-              <span className="text-xs text-zinc-400">
-                {music.length > 0 ? "不设置则根据音频时长自动计算" : "默认 5 秒"}
-              </span>
+              <div className="inline-flex rounded-lg border border-zinc-200 bg-zinc-100 p-1 dark:border-zinc-700 dark:bg-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setImageDuration(null)}
+                  className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+                    imageDuration === null
+                      ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-100"
+                      : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                  }`}
+                >
+                  自动
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setImageDuration(5)}
+                  className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+                    imageDuration !== null
+                      ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-100"
+                      : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                  }`}
+                >
+                  手动
+                </button>
+              </div>
+              {imageDuration !== null && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    min={1}
+                    max={30}
+                    value={imageDuration}
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value) || 1;
+                      setImageDuration(Math.max(1, Math.min(30, val)));
+                    }}
+                    className="w-20 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"
+                  />
+                  <span className="text-xs text-zinc-400">秒</span>
+                </div>
+              )}
             </div>
+            <p className="mt-1 text-xs text-zinc-400">
+              {imageDuration === null
+                ? "自动模式：根据音频时长和图片数量自动计算每张图片的停留时长"
+                : "手动模式：设置每张图片的固定停留时长"}
+            </p>
           </div>
         )}
 

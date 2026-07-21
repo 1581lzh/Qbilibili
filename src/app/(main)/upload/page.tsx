@@ -57,7 +57,7 @@ export default function UploadPage() {
   const [images, setImages] = useState<{ file: File; preview: string }[]>([]);
   const [selectedCoverIndex, setSelectedCoverIndex] = useState<number | null>(null);
   const [music, setMusic] = useState<{ file: File; preview: string }[]>([]);
-  const [imageDuration, setImageDuration] = useState(5);
+  const [imageDuration, setImageDuration] = useState<number | null>(5);
   const [compressDialogOpen, setCompressDialogOpen] = useState(false);
   const [compressTarget, setCompressTarget] = useState<{ file: File; type: "image" | "music" } | null>(null);
 
