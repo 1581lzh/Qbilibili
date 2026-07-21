@@ -374,12 +374,24 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration }: { imageUrls: str
       }
     };
 
+    // 检测是否是真正的触摸设备（排除触摸屏笔记本）
+    const isTouchDevice = () => {
+      // 有 ontouchstart 事件的是真正的触摸设备
+      if ("ontouchstart" in window) return true;
+      // maxTouchPoints > 0 且没有鼠标的是触摸设备
+      if (navigator.maxTouchPoints > 0) {
+        // 检查是否通过媒体查询判断为触摸设备
+        return window.matchMedia("(pointer: coarse)").matches;
+      }
+      return false;
+    };
+
     const onClick = (e: Event) => {
       // 忽略按钮/链接的点击（React stopPropagation 无法阻止原生事件冒泡到此）
       const t = (e as MouseEvent).target as HTMLElement;
       if (t.closest("button") || t.closest("a")) return;
       // Mobile: single tap toggles controls visibility
-      if ("ontouchstart" in window || navigator.maxTouchPoints > 0) {
+      if (isTouchDevice()) {
         setShowControls(prev => !prev);
       } else {
         togglePlayRef.current();
@@ -387,7 +399,7 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration }: { imageUrls: str
     };
 
     // Only attach touch handlers on touch devices (matching video-player.tsx pattern)
-    if ("ontouchstart" in window || navigator.maxTouchPoints > 0) {
+    if (isTouchDevice()) {
       el.addEventListener("touchstart", onTouchStart, { capture: true, passive: false });
       el.addEventListener("touchend", onTouchEnd, { capture: true, passive: true });
     }
