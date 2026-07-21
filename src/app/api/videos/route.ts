@@ -24,6 +24,7 @@ export async function POST(request: Request) {
 
   // Parse musicUrls array and use first URL
   let finalMusicUrl = musicUrl || null;
+  let finalMusicUrls = musicUrls || null;
   if (!finalMusicUrl && musicUrls) {
     try {
       const urls = JSON.parse(musicUrls);
@@ -43,6 +44,7 @@ export async function POST(request: Request) {
       postType,
       imageUrls: imageUrls || null,
       musicUrl: finalMusicUrl,
+      musicUrls: finalMusicUrls,
       imageDuration: imageDuration || null,
       authorId: session.user.id,
     },

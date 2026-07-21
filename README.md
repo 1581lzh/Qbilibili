@@ -12,7 +12,9 @@
 - 上传视频到阿里云 VOD（自动回退 OSS）
 - 阿里云 VOD 视频点播对接（服务端鉴权 + 客户端 SDK 上传 + 鉴权播放）
 - 图文投稿左右布局（大预览+瀑布流缩略图+编辑模式+设置封面+多音频支持+图片预览时长设置，客户端压缩）
-- 图文播放（图片轮播+音频自动播放+空格键暂停+滑动切换+自动轮播+底部图片进度条+弹性动画指示器+PC单击暂停+移动端双击暂停）
+- 图文播放（图片轮播+多首音频拼接+音频自动播放+空格键暂停+滑动切换+自动轮播+底部图片进度条+弹性动画指示器+PC单击暂停+移动端双击暂停）
+- 图文图片预览时长支持自动模式（根据音频总时长和图片数量自动计算每张图片停留时长）和手动模式（1-30秒）
+- 视频编辑功能（独立编辑页面，支持修改标题/描述/封面，图文类型支持修改图片顺序/轮播时长（自动/手动）/从现有图片选择封面/上传新封面，视频播放页和个人中心均可编辑）
 - 用户注册/登录/个人主页
 - 点赞、收藏、评论（三层嵌套回复、图片附件、回复引用预览）
 - 评论图片附件（每条最多7张，文字可选，单图4:3/多图1:1网格，全屏灯箱查看，支持粘贴上传，自动压缩）
@@ -229,65 +231,6 @@ VOD_REGION=cn-shenzhen
 VOD_ACCESS_KEY_ID=your-access-key-id
 VOD_ACCESS_KEY_SECRET=your-access-key-secret
 VOD_SPACE_NAME=your-space-name
-```
-
-## 生产部署指南
-
-本项目为开源示例版本，部分敏感信息已替换为占位符。部署前请按以下清单逐项修改：
-
-### 1. 环境变量（必须修改）
-
-编辑项目根目录 `.env` 文件，将以下占位符替换为你的真实值：
-
-| 配置项 | 说明 | 获取方式 |
-|--------|------|----------|
-| `NEXTAUTH_SECRET` | JWT 签名密钥 | 随机生成：`openssl rand -base64 32` |
-| `NEXTAUTH_URL` | 站点域名 | 改为你的域名，如 `https://your-domain.com` |
-| `OSS_ACCESS_KEY_ID` | 阿里云 AccessKey ID | 阿里云控制台 → AccessKey 管理 |
-| `OSS_ACCESS_KEY_SECRET` | 阿里云 AccessKey Secret | 同上（仅显示一次，妥善保存） |
-| `OSS_BUCKET` | OSS 存储桶名称 | 阿里云控制台 → OSS → Bucket 列表 |
-| `VOD_ACCESS_KEY_ID` | VOD AccessKey ID | 阿里云控制台 → 视频点播 → 基础设置 |
-| `VOD_ACCESS_KEY_SECRET` | VOD AccessKey Secret | 同上 |
-| `VOD_SPACE_NAME` | VOD 视频空间名称 | 阿里云控制台 → 视频点播 → 媒资管理 → 视频空间 |
-
-### 2. 域名配置（必须修改）
-
-文件：`src/lib/audio-queue.ts` 第 123 行
-
-```typescript
-// 修改前（占位符）
-videoUrl = `https://your-domain.com${videoUrl}`;
-
-// 修改后（替换为你的域名）
-videoUrl = `https://your-domain.com${videoUrl}`;
-```
-
-将 `your-domain.com` 替换为你的实际域名。
-
-### 3. Nginx 配置（部署时修改）
-
-参考 README 中的 Nginx 配置模板，需要修改以下内容：
-
-| 配置项 | 位置 | 说明 |
-|--------|------|------|
-| `server_name` | server 块 | 改为你的域名，如 `example.com *.example.com` |
-| `ssl_certificate` | HTTPS server 块 | 改为你的 SSL 证书路径 |
-| `ssl_certificate_key` | HTTPS server 块 | 改为你的 SSL 私钥路径 |
-
-### 4. 管理员账号（可选修改）
-
-当前管理面板仅允许用户名为 `LZH` 的用户访问。如需修改：
-
-文件：`src/app/(main)/admin/page.tsx`
-
-搜索 `LZH`，替换为你想要的管理员用户名。
-
-### 5. NEXTAUTH_URL 配置
-
-本地开发时保持 `http://localhost:3005`，部署到生产环境后改为你的域名：
-
-```env
-NEXTAUTH_URL=https://your-domain.com
 ```
 
 ## 常见问题

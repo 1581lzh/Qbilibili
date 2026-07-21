@@ -22,8 +22,8 @@
 - **@auth/prisma-adapter** — Prisma 认证适配器
 
 ### 视频服务
-- **阿里云 OSS** — 视频/封面云存储（Bucket: your-bucket-name，公共读）
-- **阿里云 VOD** — 视频点播服务（Region: cn-shenzhen，Space: outin-1ea2565a6bd411f1a83100163e18773e）
+- **阿里云 OSS** — 视频/封面云存储（Bucket: your-bucket，公共读）
+- **阿里云 VOD** — 视频点播服务（Region: cn-shenzhen，Space: your-space-name）
 - **Aliplayer 2.25.1** — 阿里云播放器 SDK（CDN 引入，统一所有视频播放）
 - **aliyun-upload-sdk 1.5.7** — 阿里云 VOD 上传 SDK（本地 public/lib/ 引入）
 - **ali-oss** — 阿里云 OSS SDK（Node.js 端）
@@ -33,7 +33,7 @@
 ### 部署
 - **Nginx** — Web 服务器 + HTTPS 反向代理
 - **DigiCert 证书** — TLS 1.2/1.3，覆盖 `your-domain.com` + `www.your-domain.com`
-- **公网服务器** — 生产环境部署（LPK，Rocky Linux 10）
+- **公网服务器** — 生产环境部署
 
 ## 目录结构
 
@@ -104,7 +104,7 @@ H:\bilibili/
 │   │   └── video/             # 视频相关组件
 │   │       ├── video-card.tsx             # 视频卡片（同名同色头像）
 │   │       ├── video-player.tsx           # 视频播放器（Aliplayer + 空格键暂停/播放）
-│   │       ├── video-play-section.tsx     # 播放区域（含图片轮播组件，支持图文播放，PC 单击暂停 + 移动端双击暂停，底部图片进度条）
+│   │       ├── video-play-section.tsx     # 播放区域（含图片轮播组件，支持图文播放，PC 单击暂停 + 移动端双击暂停，底部图片进度条，移动端单击切换控制栏）
 │   │       ├── video-like-button.tsx      # 点赞按钮（乐观更新，即时响应）
 │   │       ├── video-favorite-button.tsx  # 收藏按钮（乐观更新，即时响应）
 │   │       ├── video-delete-button.tsx    # 删除视频按钮
@@ -175,7 +175,9 @@ H:\bilibili/
 - `views`: 播放次数
 - `postType`: 投稿类型（"video" 或 "image_text"）
 - `imageUrls`: 图片 URL 列表（JSON 字符串，图文投稿时使用）
-- `musicUrls`: 背景音乐 URL 列表（JSON 字符串，可选，最多3个，图文投稿时使用）
+- `musicUrl`: 第一首背景音乐 URL（向后兼容）
+- `musicUrls`: 背景音乐 URL 列表（JSON 字符串，支持多首音频拼接）
+- `imageDuration`: 图片轮播时长（秒，仅图文类型，null=自动模式，1-30=手动模式）
 - `audioNormalized`: 是否已音频标准化（默认 false）
 - `normalizedUrl`: 标准化后的视频 URL（可选）
 - `authorId`: 上传者 ID
@@ -234,6 +236,7 @@ H:\bilibili/
 ### 视频相关
 - `GET /api/videos?q=` — 获取视频列表（支持搜索）
 - `POST /api/videos` — 投稿（写入数据库）
+- `PUT /api/videos/[videoId]` — 更新视频（仅作者，支持修改标题、描述、封面、图片顺序、轮播时长）
 - `DELETE /api/videos/[videoId]` — 删除视频（仅作者，清理 OSS 文件和关联数据）
 - `GET /api/videos/[videoId]/detail` — 获取视频详情（含 nextVideoId、likeCount、favoriteCount、liked、favorited，用于自动连播和切换视频后状态同步）
 - `GET /api/videos/recommendations` — 获取推荐列表
@@ -296,7 +299,7 @@ OSS_BUCKET=your-bucket-name
 VOD_REGION=cn-shenzhen
 VOD_ACCESS_KEY_ID=your-access-key-id
 VOD_ACCESS_KEY_SECRET=your-access-key-secret
-VOD_SPACE_NAME=outin-1ea2565a6bd411f1a83100163e18773e
+VOD_SPACE_NAME=your-space-name
 ```
 
 ## 安全防护

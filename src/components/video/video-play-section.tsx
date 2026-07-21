@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useReducer } from "react";
+import { useState, useRef, useEffect, useCallback, useReducer, useMemo } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
@@ -8,6 +8,7 @@ import VideoPlayer from "@/components/video/video-player";
 import VideoLikeButton from "@/components/video/video-like-button";
 import VideoFavoriteButton from "@/components/video/video-favorite-button";
 import VideoDeleteButton from "@/components/video/video-delete-button";
+import { Pencil } from "lucide-react";
 
 interface VideoInfo {
   id: string;
@@ -21,6 +22,7 @@ interface VideoInfo {
   postType?: string;
   imageUrls?: string | null;
   musicUrl?: string | null;
+  musicUrls?: string | null;
   imageDuration?: number | null;
   author: { id: string; name: string };
   createdAt: Date | string;
@@ -72,16 +74,25 @@ const CAROUSEL_VARIANTS = {
   exit: (dir: number) => ({ opacity: 0, x: dir * -100 }),
 };
 
-function ImageCarousel({ imageUrls, musicUrl, imageDuration }: { imageUrls: string[]; musicUrl?: string | null; imageDuration?: number | null }) {
+function ImageCarousel({ imageUrls, musicUrls, imageDuration }: { imageUrls: string[]; musicUrls?: string[] | null; imageDuration?: number | null }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true); // Start playing by default
-  const [audioDuration, setAudioDuration] = useState(0);
+  const [totalAudioDuration, setTotalAudioDuration] = useState(0);
+  const [currentAudioIndex, setCurrentAudioIndex] = useState(0);
   const [userInteracted, setUserInteracted] = useState(false); // Track if user manually switched
   const [showIndicator, setShowIndicator] = useState<"play" | "pause" | null>(null);
   const [progress, setProgress] = useState(0); // 0-100 progress for current image
+  const [showControls, setShowControls] = useState(() => {
+    // Mobile: show controls for 3 seconds on mount
+    if (typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0)) {
+      return true;
+    }
+    return false;
+  });
   const dirRef = useRef(0);
   const [, forceRender] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
+  const audioUrlsRef = useRef<string[]>([]);
   const autoPlayTimerRef = useRef<NodeJS.Timeout | null>(null);
   const indicatorTimerRef = useRef<NodeJS.Timeout | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -90,16 +101,23 @@ function ImageCarousel({ imageUrls, musicUrl, imageDuration }: { imageUrls: stri
   const elapsedRef = useRef(0); // accumulated elapsed ms (survives index changes)
   const lastTickRef = useRef(0); // last RAF timestamp
 
+  // Parse musicUrls
+  const audioUrls = useMemo(() => {
+    if (musicUrls && musicUrls.length > 0) return musicUrls;
+    return [];
+  }, [musicUrls]);
+  audioUrlsRef.current = audioUrls;
+
   const images = imageUrls.filter(url => url);
 
-  // Calculate interval: user-set duration, or audio duration / image count
+  // Calculate interval: user-set duration, or total audio duration / image count
   const getInterval = useCallback(() => {
     if (imageDuration && imageDuration > 0) return imageDuration * 1000;
-    if (audioDuration > 0 && images.length > 1) {
-      return Math.ceil(audioDuration / images.length) * 1000;
+    if (totalAudioDuration > 0 && images.length > 1) {
+      return Math.ceil(totalAudioDuration / images.length) * 1000;
     }
     return 5000; // default 5s
-  }, [imageDuration, audioDuration, images.length]);
+  }, [imageDuration, totalAudioDuration, images.length]);
 
   const goToImage = useCallback((newIndex: number) => {
     setCurrentIndex(prev => {
@@ -123,6 +141,17 @@ function ImageCarousel({ imageUrls, musicUrl, imageDuration }: { imageUrls: stri
       setProgress(100); // Manual switch: show full bar
     }
   }, [userInteracted]);
+
+  // Auto-hide controls on mobile after 3 seconds
+  useEffect(() => {
+    if (!showControls) return;
+    const isMobile = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+    if (!isMobile) return;
+    const timer = setTimeout(() => {
+      setShowControls(false);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [showControls]);
 
   // Auto-play timer with smooth progress animation
   useEffect(() => {
@@ -205,7 +234,7 @@ function ImageCarousel({ imageUrls, musicUrl, imageDuration }: { imageUrls: stri
         showTempIndicator("pause");  // Show pause icon = "click to pause"
       }
       setIsPlaying(!isPlaying);
-    } else if (musicUrl) {
+    } else if (audioUrls.length > 0) {
       setIsPlaying(true);
       showTempIndicator("pause");
     } else {
@@ -213,21 +242,24 @@ function ImageCarousel({ imageUrls, musicUrl, imageDuration }: { imageUrls: stri
       setIsPlaying(newPlaying);
       showTempIndicator(newPlaying ? "pause" : "play");
     }
-  }, [isPlaying, musicUrl, showTempIndicator]);
+  }, [isPlaying, audioUrls.length, showTempIndicator]);
 
   // Keep refs in sync so native event listeners always call latest callbacks
   const handleManualSwitchRef = useRef(handleManualSwitch);
   const togglePlayRef = useRef(togglePlay);
   const currentIndexRef = useRef(currentIndex);
   const imagesLengthRef = useRef(images.length);
+  const currentAudioIndexRef = useRef(currentAudioIndex);
   useEffect(() => { handleManualSwitchRef.current = handleManualSwitch; });
   useEffect(() => { togglePlayRef.current = togglePlay; });
   useEffect(() => { currentIndexRef.current = currentIndex; });
   useEffect(() => { imagesLengthRef.current = images.length; });
+  useEffect(() => { currentAudioIndexRef.current = currentAudioIndex; });
 
   const handleAudioLoadedMetadata = () => {
     if (audioRef.current) {
-      setAudioDuration(audioRef.current.duration);
+      // Add current audio duration to total
+      setTotalAudioDuration(prev => prev + audioRef.current!.duration);
       // Auto-play audio when loaded (browser may block autoplay)
       if (isPlaying) {
         audioRef.current.play().catch(() => {
@@ -235,6 +267,18 @@ function ImageCarousel({ imageUrls, musicUrl, imageDuration }: { imageUrls: stri
           setIsPlaying(false);
         });
       }
+    }
+  };
+
+  const handleAudioEnded = () => {
+    // Play next audio if available
+    if (currentAudioIndexRef.current < audioUrlsRef.current.length - 1) {
+      setCurrentAudioIndex(prev => prev + 1);
+    }
+    // Loop: restart from first audio when all audios finish
+    else {
+      setCurrentAudioIndex(0);
+      setTotalAudioDuration(0);
     }
   };
 
@@ -315,12 +359,15 @@ function ImageCarousel({ imageUrls, musicUrl, imageDuration }: { imageUrls: stri
         return;
       }
 
-      // Double-tap → toggle play/pause
+      // Double-tap → toggle play/pause and hide controls
       const now = Date.now();
       if (now - lastTapRef.current < 300) {
         togglePlayRef.current();
+        setShowControls(false);
         lastTapRef.current = 0;
       } else {
+        // Single tap → toggle controls visibility
+        setShowControls(prev => !prev);
         lastTapRef.current = now;
       }
     };
@@ -329,7 +376,12 @@ function ImageCarousel({ imageUrls, musicUrl, imageDuration }: { imageUrls: stri
       // 忽略按钮/链接的点击（React stopPropagation 无法阻止原生事件冒泡到此）
       const t = (e as MouseEvent).target as HTMLElement;
       if (t.closest("button") || t.closest("a")) return;
-      togglePlayRef.current();
+      // Mobile: single tap toggles controls visibility
+      if ("ontouchstart" in window || navigator.maxTouchPoints > 0) {
+        setShowControls(prev => !prev);
+      } else {
+        togglePlayRef.current();
+      }
     };
 
     // Only attach touch handlers on touch devices (matching video-player.tsx pattern)
@@ -359,13 +411,13 @@ function ImageCarousel({ imageUrls, musicUrl, imageDuration }: { imageUrls: stri
       ref={containerRef}
       className="relative h-full w-full bg-black group"
     >
-      {musicUrl && (
+      {audioUrls.length > 0 && (
         <audio
           ref={audioRef}
-          src={musicUrl}
-          loop
+          src={audioUrls[currentAudioIndex]}
           preload="auto"
           onLoadedMetadata={handleAudioLoadedMetadata}
+          onEnded={handleAudioEnded}
         />
       )}
 
@@ -413,7 +465,7 @@ function ImageCarousel({ imageUrls, musicUrl, imageDuration }: { imageUrls: stri
       </AnimatePresence>
 
       {/* Bottom control bar - like video player */}
-      <div className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/70 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100">
+      <div className={`absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/70 to-transparent transition-opacity duration-300 opacity-0 group-hover:opacity-100 ${showControls ? '!opacity-100' : ''}`}>
         {/* Progress bar */}
         {images.length > 1 && (
           <div className="flex gap-[2px] px-2 pt-2">
@@ -475,14 +527,14 @@ function ImageCarousel({ imageUrls, musicUrl, imageDuration }: { imageUrls: stri
         </div>
       </div>
 
-      {/* Navigation arrows - visible on hover */}
+      {/* Navigation arrows - visible on hover, hidden on mobile */}
       {images.length > 1 && (
         <>
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); handleManualSwitch(Math.max(0, currentIndex - 1)); }}
             disabled={currentIndex === 0}
-            className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-2 text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100 disabled:opacity-30"
+            className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-2 text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100 disabled:opacity-30 hidden sm:block"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -492,7 +544,7 @@ function ImageCarousel({ imageUrls, musicUrl, imageDuration }: { imageUrls: stri
             type="button"
             onClick={(e) => { e.stopPropagation(); handleManualSwitch(Math.min(images.length - 1, currentIndex + 1)); }}
             disabled={currentIndex === images.length - 1}
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-2 text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100 disabled:opacity-30"
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-2 text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100 disabled:opacity-30 hidden sm:block"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -580,7 +632,7 @@ export default function VideoPlaySection({
           {state.video.postType === "image_text" && state.video.imageUrls ? (
             <ImageCarousel
               imageUrls={JSON.parse(state.video.imageUrls)}
-              musicUrl={state.video.audioNormalized && state.video.normalizedUrl ? state.video.normalizedUrl : state.video.musicUrl}
+              musicUrls={state.video.musicUrls ? JSON.parse(state.video.musicUrls) : (state.video.musicUrl ? [state.video.musicUrl] : null)}
               imageDuration={state.video.imageDuration}
             />
           ) : (
@@ -614,7 +666,18 @@ export default function VideoPlaySection({
           <div className="mt-3 flex items-center gap-2 sm:mt-4 sm:gap-3">
             <VideoLikeButton key={`like-${state.video.id}`} videoId={state.video.id} initialCount={state.likeCount} initialLiked={state.liked} />
             <VideoFavoriteButton key={`fav-${state.video.id}`} videoId={state.video.id} initialCount={state.favoriteCount} initialFavorited={state.favorited} />
-            {isOwner && <VideoDeleteButton videoId={state.video.id} postType={state.video.postType} />}
+            {isOwner && (
+              <>
+                <Link
+                  href={`/edit/${state.video.id}`}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-red-300 px-4 py-2 text-sm font-medium text-red-600 transition-colors hover:border-red-500 hover:text-red-500 disabled:opacity-50 dark:border-red-800 dark:text-red-400 dark:hover:border-red-500 dark:hover:text-red-400"
+                >
+                  <Pencil className="h-4 w-4" />
+                  编辑
+                </Link>
+                <VideoDeleteButton videoId={state.video.id} postType={state.video.postType} />
+              </>
+            )}
           </div>
         </div>
         <div className="mt-4 border-t border-zinc-200 pt-4 dark:border-zinc-800 sm:mt-6 sm:pt-6">

@@ -34,8 +34,9 @@ model Video {
   views           Int      @default(0)
   postType        String   @default("video")  // "video" or "image_text"
   imageUrls       String?  // JSON array of image URLs
-  musicUrl        String?  // Music file URL
-  imageDuration   Float?   // Image preview duration in seconds (image_text only)
+  musicUrl        String?  // First music file URL (for backward compatibility)
+  musicUrls       String?  // JSON array of music URLs (for multi-audio support)
+  imageDuration   Float?   // Image preview duration in seconds (image_text only, null=auto)
   audioNormalized Boolean  @default(false)
   normalizedUrl   String?
   author          User     @relation(fields: [authorId], references: [id])
