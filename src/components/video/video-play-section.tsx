@@ -361,11 +361,10 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration }: { imageUrls: str
         return;
       }
 
-      // Double-tap → toggle play/pause and hide controls
+      // Double-tap → toggle play/pause (keep controls state unchanged)
       const now = Date.now();
       if (now - lastTapRef.current < 300) {
         togglePlayRef.current();
-        setShowControls(false);
         lastTapRef.current = 0;
       } else {
         // Single tap → toggle controls visibility
@@ -525,19 +524,26 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration }: { imageUrls: str
             {currentIndex + 1} / {images.length}
           </div>
 
-          {/* Right: Thumbnail dots */}
-          <div className="flex gap-1">
-            {images.length <= 10 && images.map((_, index) => (
-              <button
-                key={index}
-                type="button"
-                onClick={(e) => { e.stopPropagation(); handleManualSwitch(index); }}
-                className={`h-1.5 w-1.5 rounded-full transition-all ${
-                  index === currentIndex ? "bg-[#FB7299]" : "bg-white/50"
-                }`}
-              />
-            ))}
-          </div>
+          {/* Right: Fullscreen button */}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              const el = containerRef.current;
+              if (el) {
+                if (document.fullscreenElement) {
+                  document.exitFullscreen();
+                } else {
+                  el.requestFullscreen();
+                }
+              }
+            }}
+            className="text-white hover:text-[#FB7299]"
+          >
+            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+            </svg>
+          </button>
         </div>
       </div>
 
