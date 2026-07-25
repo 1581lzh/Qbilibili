@@ -328,6 +328,13 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration, playMode, onNext }
     }
   }, [isPlaying]);
 
+  // Auto-play audio when currentAudioIndex changes (e.g. audio ended → loop back to first)
+  useEffect(() => {
+    if (isPlaying && audioRef.current && audioRef.current.paused) {
+      audioRef.current.play().catch(() => {});
+    }
+  }, [currentAudioIndex, isPlaying]);
+
   // Resume audio on user interaction if blocked
   useEffect(() => {
     const handleUserInteraction = () => {
