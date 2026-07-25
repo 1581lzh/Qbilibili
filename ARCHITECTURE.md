@@ -104,7 +104,7 @@ H:\bilibili/
 │   │   └── video/             # 视频相关组件
 │   │       ├── video-card.tsx             # 视频卡片（同名同色头像）
 │   │       ├── video-player.tsx           # 视频播放器（Aliplayer + 空格键暂停/播放）
-│   │       ├── video-play-section.tsx     # 播放区域（含图片轮播组件，支持图文播放，PC 单击暂停 + 移动端双击暂停，底部图片进度条，移动端单击切换控制栏）
+│   │       ├── video-play-section.tsx     # 播放区域（含图片轮播组件，支持图文播放，播放模式切换（循环/单次/自动连播），PC 单击暂停 + 移动端双击暂停，底部图片进度条，移动端单击切换控制栏）
 │   │       ├── video-like-button.tsx      # 点赞按钮（乐观更新，即时响应）
 │   │       ├── video-favorite-button.tsx  # 收藏按钮（乐观更新，即时响应）
 │   │       ├── video-delete-button.tsx    # 删除视频按钮
@@ -127,6 +127,7 @@ H:\bilibili/
 │   │   ├── fetch-cache.ts     # 客户端 fetch 缓存工具（TTL + Map 缓存，替代裸 fetch）
 │   │   ├── signals.ts         # 类型安全的 sessionStorage 信号工具（autoPlayVideo/highlightComment）
 │   │   ├── vod-cache.ts       # VOD playAuth 缓存模块（模块级 Map + 60秒 TTL）
+│   │   ├── play-mode.ts       # 播放模式共享模块（PlayMode 类型 + fetchPlayMode/updatePlayMode，视频/图文统一）
 │   │   ├── audio-normalize.ts # FFmpeg 音频响度标准化服务（EBU R128，-14 LUFS）
 │   │   └── audio-queue.ts     # 音频处理异步队列（内存队列 + Worker，5秒轮询）
 │   ├── instrumentation.ts     # 服务器启动时初始化音频队列处理器
@@ -161,6 +162,7 @@ H:\bilibili/
 - `password`: 密码（**MVP 阶段为明文存储，生产环境应使用 bcryptjs 哈希**）
 - `role`: 角色（默认 "user"）
 - `tokenVersion`: 会话版本号（修改密码时递增，用于使旧会话失效）
+- `playMode`: 播放模式偏好（默认 "loop"，可选 "loop"/"single"/"next"，视频和图文共享）
 - `avatar`: 头像 URL
 - `createdAt`: 创建时间
 
@@ -223,6 +225,8 @@ H:\bilibili/
 ### 用户相关
 - `GET /api/user/profile` — 获取当前用户资料（含投稿/获赞/收藏/评论数）
 - `PUT /api/user/profile` — 修改用户名/密码
+- `GET /api/user/play-mode` — 获取用户播放模式偏好（loop/single/next）
+- `PUT /api/user/play-mode` — 更新用户播放模式偏好
 - `GET /api/user/favorites` — 获取收藏列表
 - `GET /api/user/likes` — 获取视频点赞列表
 - `GET /api/user/uploads` — 获取我的投稿列表
@@ -521,7 +525,7 @@ sudo firewall-cmd --reload
 ### 已实现功能
 1. **首页** — 视频卡片网格布局，同名同色头像
 2. **视频播放页** — 视频播放、点赞、收藏、评论、删除（仅作者）
-3. **视频播放器** — Aliplayer 统一播放所有视频（VOD 鉴权播放 / OSS 直链播放），点击视频区域播放/暂停，播放模式切换（循环/单次/自动连播），模式记忆
+3. **视频播放器** — Aliplayer 统一播放所有视频（VOD 鉴权播放 / OSS 直链播放），点击视频区域播放/暂停，播放模式切换（循环/单次/自动连播），模式按用户永久保存到数据库（User.playMode），视频和图文共享同一设置
 4. **自动连播** — 不刷新页面切换视频，ready 事件后自动播放，推荐列表同步更新
 5. **上传页** — VOD 上传（通过 aliyun-upload-sdk 直传 VOD），失败自动回退 OSS；支持粘贴/拖拽、文件预览、上传进度条
 6. **图文投稿** — 支持多张图片（最多40张）和可选背景音乐上传，图片预览轮播+缩略图导航（拖拽排序+封面选择），客户端压缩（Canvas API），进度百分比显示整数
@@ -626,7 +630,7 @@ sudo firewall-cmd --reload
 - 桌面端点击视频区域（非控件）切换播放/暂停：白名单方式监听 `<video>`、封面、大播放按钮的 click 事件
 - 移动端通过 `touchend` 事件检测双击（300ms 间隔）切换播放/暂停，桌面端保持单击
 - 播放模式：循环播放（ended 时 seek+play）、单次播放（自然停止）、自动连播（ended 时跳转下个视频，ready 事件后自动播放）
-- 播放模式按账号记忆（localStorage），未登录按浏览器会话记忆（sessionStorage）
+- 播放模式按用户保存到数据库（User.playMode），视频和图文共享同一设置，未登录用户使用 localStorage/sessionStorage 降级
 - **事件监听器管理** — click/touchend 监听器通过变量保存引用，在 useEffect cleanup 中正确移除，避免视频切换时监听器叠加
 - **播放/暂停中心动画** — 自建 `.bili-anim` overlay div（不依赖 Aliplayer 内部 `.prism-animation`），监听 `player.on('play')`/`player.on('pause')` 事件触发弹性缩放动画（0.7s ease-out，18vw/18vh 响应尺寸）
 - **PlaylistComponent 播放列表组件** — 阿里云官方组件（不提供 CDN），从 GitHub 下载 `aliplayercomponents-1.1.7.min.js` 放到 `public/lib/`。通过 `components` 配置注册，初始化时通过 `args: [playlist]` 传入播放列表。控制条添加上一个/播放列表/下一个按钮，列表按钮通过 CSS 隐藏

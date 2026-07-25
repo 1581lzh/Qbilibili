@@ -13,6 +13,7 @@ model User {
   name         String        @unique
   password     String
   role         String        @default("user")
+  playMode     String        @default("loop")
   tokenVersion Int           @default(0)
   avatar       String?
   videos       Video[]

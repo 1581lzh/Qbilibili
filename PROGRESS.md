@@ -32,7 +32,7 @@
   - 全屏灯箱查看原图（键盘导航、ESC 关闭）
   - 前端文件验证（5MB 限制、格式检查）、上传进度指示
 - **视频点赞** — 点赞/取消点赞，服务端查询初始状态
-- **视频播放器** — 暂停遮罩、播放模式切换（循环/单次/自动连播）、模式记忆
+- **视频播放器** — 暂停遮罩、播放模式切换（循环/单次/自动连播）、模式按用户永久保存到数据库
 - **播放/暂停中心动画** — 自建 overlay div + 弹性缩放动画（player.on('play')/('pause') 事件触发）
 - **视频切换** — PlaylistComponent 原生上一个/下一个按钮（CSS 三角形图标），tooltip 通过 class 切换显示，键盘 ←→ 快捷键
 - **PlaylistComponent 集成** — 从 GitHub 下载 aliplayercomponents.min.js，通过 args 传入播放列表，隐藏列表按钮只保留切换按钮
@@ -262,6 +262,20 @@
   - **类型安全的 sessionStorage 信号工具** — 新建 `src/lib/signals.ts`，将分散在 7 个文件中的 `sessionStorage.setItem/getItem` 硬编码字符串键提取为 4 个类型安全的函数（`setAutoPlayVideo`、`consumeAutoPlayVideo`、`setHighlightComment`、`consumeHighlightComment`），消除键名拼写错误导致静默失败的风险
   - **VOD auth 缓存模块化** — 新建 `src/lib/vod-cache.ts`，将 `video-player.tsx` 中 `globalThis.__vodAuthCache` 的全局可变对象提取为独立的 TypeScript 模块（`getVodPlayAuth()` 函数），提供类型安全的缓存接口和 60 秒 TTL
   - **VideoPlaySection useReducer 重构** — 将 `video-play-section.tsx` 中 8 个独立 `useState` 调用合并为单个 `useReducer`（`VideoState` 接口 + `VideoAction` 联合类型 + `videoReducer`），`onVideoChange` 回调从 8 行 setter 简化为 1 行 dispatch
+
+### 播放模式用户偏好设置（本次会话新增）
+- **数据库持久化** — User 表新增 `playMode` 字段（默认 "loop"），播放模式按用户永久保存
+- **API 路由** — 新建 `/api/user/play-mode`（GET/PUT），读写用户播放模式偏好
+- **共享模块** — 新建 `src/lib/play-mode.ts`，导出 `PlayMode` 类型、`MODES` 常量、`fetchPlayMode()` 和 `updatePlayMode()`，视频和图文播放器共用
+- **视频播放器** — 移除本地 localStorage 逻辑，改用共享模块（从 API 获取 + API 更新 + localStorage 降级）
+- **图文播放器** — ImageCarousel 新增播放模式支持：
+  - `loop`：所有图片播完后回到第 1 张继续（默认行为）
+  - `single`：所有图片播完后停止在最后一张
+  - `next`：所有图片播完后跳转下一个视频
+  - 右上角模式切换按钮（Repeat/Play/SkipForward 图标 + tooltip）
+- **VideoPlaySection** — 新增 `playMode` prop，服务端从数据库读取传入，图文播放器通过 `onNext` 回调跳转下一个视频
+- **视频播放页** — 服务端 Promise.all 中新增查询 User.playMode，传给 VideoPlaySection
+- **未登录兼容** — API 返回 401 时前端 fallback 到 localStorage/sessionStorage（保持现有体验）
 
 ### 音频响度标准化（本次会话新增）
 - **异步处理队列** — `src/lib/audio-queue.ts` 实现内存队列 + Worker，每 5 秒检查一次，失败最多重试 2 次

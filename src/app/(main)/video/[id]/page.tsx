@@ -19,7 +19,7 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
   const isOwner = session?.user?.id === video.authorId;
   const userId = session?.user?.id;
 
-  const [likeCount, favoriteCount, existingLike, existingFavorite, nextVideo, prevVideo] = await Promise.all([
+  const [likeCount, favoriteCount, existingLike, existingFavorite, nextVideo, prevVideo, userPlayMode] = await Promise.all([
     db.like.count({ where: { videoId: id } }),
     db.favorite.count({ where: { videoId: id } }),
     userId ? db.like.findUnique({ where: { videoId_userId: { videoId: id, userId } } }) : null,
@@ -34,6 +34,7 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
       orderBy: { createdAt: "asc" },
       select: { id: true },
     }),
+    userId ? db.user.findUnique({ where: { id: userId }, select: { playMode: true } }) : null,
   ]);
 
   return (
@@ -63,6 +64,7 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
         initialFavoriteCount={favoriteCount}
         initialFavorited={!!existingFavorite}
         userId={session?.user?.id}
+        playMode={(userPlayMode?.playMode as "loop" | "single" | "next") ?? "loop"}
       />
     </div>
   );

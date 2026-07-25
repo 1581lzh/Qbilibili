@@ -7,10 +7,9 @@ import { toHttps, optimizedCover } from "@/lib/image";
 import { cachedFetch } from "@/lib/fetch-cache";
 import { consumeAutoPlayVideo } from "@/lib/signals";
 import { getVodPlayAuth } from "@/lib/vod-cache";
+import { type PlayMode, MODES, fetchPlayMode, updatePlayMode } from "@/lib/play-mode";
 
-type PlayMode = "loop" | "single" | "next";
-
-const MODES: { key: PlayMode; label: string; icon: typeof Repeat }[] = [
+const VIDEO_MODES: { key: PlayMode; label: string; icon: typeof Repeat }[] = [
   { key: "loop", label: "循环播放", icon: Repeat },
   { key: "single", label: "单次播放", icon: Play },
   { key: "next", label: "自动连播", icon: SkipForward },
@@ -27,25 +26,6 @@ interface VideoInfo {
   normalizedUrl?: string | null;
   author: { id: string; name: string };
   createdAt: Date | string;
-}
-
-function getSavedMode(userId?: string | null): PlayMode {
-  if (typeof window === "undefined") return "loop";
-  try {
-    const key = userId ? `playmode_${userId}` : "playmode_guest";
-    const storage = userId ? localStorage : sessionStorage;
-    const saved = storage.getItem(key);
-    if (saved && MODES.some((m) => m.key === saved)) return saved as PlayMode;
-  } catch {}
-  return "loop";
-}
-
-function saveMode(mode: PlayMode, userId?: string | null) {
-  try {
-    const key = userId ? `playmode_${userId}` : "playmode_guest";
-    const storage = userId ? localStorage : sessionStorage;
-    storage.setItem(key, mode);
-  } catch {}
 }
 
 declare global {
@@ -243,7 +223,7 @@ export default function VideoPlayer({
   userIdRef.current = userId;
   currentVideoRef.current = initialVideo;
 
-  useEffect(() => { setMode(getSavedMode(userId)); }, [userId]);
+  useEffect(() => { fetchPlayMode(userId).then(setMode); }, [userId]);
   useEffect(() => { modeRef.current = mode; }, [mode]);
 
   const navigateToNext = useCallback(async () => {
@@ -460,8 +440,8 @@ export default function VideoPlayer({
     };
   }, [initialVideo.id, initialVideo.vodVideoId, initialVideo.videoUrl]);
 
-  const cycleMode = () => { setMode((p) => { const i = MODES.findIndex((m) => m.key === p); const n = MODES[(i + 1) % MODES.length].key; saveMode(n, userIdRef.current); return n; }); };
-  const current = MODES.find((m) => m.key === mode)!;
+  const cycleMode = () => { setMode((p) => { const i = VIDEO_MODES.findIndex((m) => m.key === p); const n = VIDEO_MODES[(i + 1) % VIDEO_MODES.length].key; updatePlayMode(n, userIdRef.current); return n; }); };
+  const current = VIDEO_MODES.find((m) => m.key === mode)!;
   const Icon = current.icon;
 
   return (

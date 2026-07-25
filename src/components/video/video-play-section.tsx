@@ -8,7 +8,8 @@ import VideoPlayer from "@/components/video/video-player";
 import VideoLikeButton from "@/components/video/video-like-button";
 import VideoFavoriteButton from "@/components/video/video-favorite-button";
 import VideoDeleteButton from "@/components/video/video-delete-button";
-import { Pencil } from "lucide-react";
+import { Pencil, Repeat, Play, SkipForward } from "lucide-react";
+import { type PlayMode, MODES, fetchPlayMode, updatePlayMode } from "@/lib/play-mode";
 
 interface VideoInfo {
   id: string;
@@ -74,7 +75,7 @@ const CAROUSEL_VARIANTS = {
   exit: (dir: number) => ({ opacity: 0, x: dir * -100 }),
 };
 
-function ImageCarousel({ imageUrls, musicUrls, imageDuration }: { imageUrls: string[]; musicUrls?: string[] | null; imageDuration?: number | null }) {
+function ImageCarousel({ imageUrls, musicUrls, imageDuration, playMode, onNext }: { imageUrls: string[]; musicUrls?: string[] | null; imageDuration?: number | null; playMode: PlayMode; onNext?: () => void }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true); // Start playing by default
   const [totalAudioDuration, setTotalAudioDuration] = useState(0);
@@ -82,6 +83,8 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration }: { imageUrls: str
   const [userInteracted, setUserInteracted] = useState(false); // Track if user manually switched
   const [showIndicator, setShowIndicator] = useState<"play" | "pause" | null>(null);
   const [progress, setProgress] = useState(0); // 0-100 progress for current image
+  const [mode, setMode] = useState<PlayMode>(playMode);
+  const [showModeTooltip, setShowModeTooltip] = useState(false);
   const [showControls, setShowControls] = useState(() => {
     // Mobile: show controls for 3 seconds on mount
     if (typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0)) {
@@ -100,6 +103,9 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration }: { imageUrls: str
   const progressRafRef = useRef<number>(0);
   const elapsedRef = useRef(0); // accumulated elapsed ms (survives index changes)
   const lastTickRef = useRef(0); // last RAF timestamp
+  const modeRef = useRef<PlayMode>(playMode);
+
+  useEffect(() => { modeRef.current = mode; }, [mode]);
 
   // Parse musicUrls
   const audioUrls = useMemo(() => {
@@ -189,11 +195,31 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration }: { imageUrls: str
     const remaining = Math.max(0, interval - elapsedRef.current);
     autoPlayTimerRef.current = setTimeout(() => {
       elapsedRef.current = 0;
+      const currentMode = modeRef.current;
       setCurrentIndex(prev => {
-        const next = prev >= images.length - 1 ? 0 : prev + 1;
+        const isLast = prev >= images.length - 1;
+        if (isLast) {
+          if (currentMode === "single") {
+            // Stop on last image
+            setIsPlaying(false);
+            setProgress(100);
+            return prev;
+          }
+          if (currentMode === "next") {
+            // Navigate to next video
+            setIsPlaying(false);
+            setProgress(100);
+            onNext?.();
+            return prev;
+          }
+          // loop: back to first
+          dirRef.current = 1;
+          forceRender(n => n + 1);
+          return 0;
+        }
         dirRef.current = 1;
         forceRender(n => n + 1);
-        return next;
+        return prev + 1;
       });
     }, remaining);
 
@@ -245,6 +271,14 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration }: { imageUrls: str
       showTempIndicator(newPlaying ? "pause" : "play");
     }
   }, [isPlaying, audioUrls.length, showTempIndicator]);
+
+  const cycleMode = useCallback(() => {
+    setMode(prev => {
+      const i = MODES.findIndex(m => m.key === prev);
+      const next = MODES[(i + 1) % MODES.length].key;
+      return next;
+    });
+  }, []);
 
   // Keep refs in sync so native event listeners always call latest callbacks
   const handleManualSwitchRef = useRef(handleManualSwitch);
@@ -524,8 +558,28 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration }: { imageUrls: str
             {currentIndex + 1} / {images.length}
           </div>
 
-          {/* Right: Fullscreen button */}
-          <button
+          {/* Right: Mode selector + Fullscreen */}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                cycleMode();
+              }}
+              onMouseEnter={() => setShowModeTooltip(true)}
+              onMouseLeave={() => setShowModeTooltip(false)}
+              className="relative text-white hover:text-[#FB7299]"
+            >
+              {mode === "loop" && <Repeat className="h-5 w-5" />}
+              {mode === "single" && <Play className="h-5 w-5" />}
+              {mode === "next" && <SkipForward className="h-5 w-5" />}
+              {showModeTooltip && (
+                <div className="absolute bottom-8 right-0 whitespace-nowrap rounded bg-black/80 px-2 py-1 text-xs text-white">
+                  {MODES.find(m => m.key === mode)?.label}
+                </div>
+              )}
+            </button>
+            <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
@@ -618,6 +672,7 @@ export default function VideoPlaySection({
   initialFavoriteCount,
   initialFavorited,
   userId,
+  playMode = "loop",
 }: {
   video: VideoInfo;
   nextVideoId?: string;
@@ -628,6 +683,7 @@ export default function VideoPlaySection({
   initialFavoriteCount: number;
   initialFavorited?: boolean;
   userId?: string | null;
+  playMode?: PlayMode;
 }) {
   const [state, dispatch] = useReducer(videoReducer, {
     video,
@@ -639,6 +695,19 @@ export default function VideoPlaySection({
     favoriteCount: initialFavoriteCount,
     favorited: initialFavorited ?? false,
   });
+
+  const handleNextVideo = useCallback(async () => {
+    if (!state.nextVideoId) return;
+    try {
+      const res = await fetch(`/api/videos/${state.nextVideoId}/detail`);
+      if (!res.ok) return;
+      const data = await res.json();
+      window.history.replaceState(null, "", `/video/${data.id}`);
+      dispatch({ type: "NAVIGATE", video: data });
+    } catch {
+      window.location.href = `/video/${state.nextVideoId}`;
+    }
+  }, [state.nextVideoId]);
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
@@ -654,6 +723,8 @@ export default function VideoPlaySection({
               imageUrls={JSON.parse(state.video.imageUrls)}
               musicUrls={state.video.musicUrls ? JSON.parse(state.video.musicUrls) : (state.video.musicUrl ? [state.video.musicUrl] : null)}
               imageDuration={state.video.imageDuration}
+              playMode={playMode}
+              onNext={handleNextVideo}
             />
           ) : (
             <VideoPlayer

@@ -35,6 +35,8 @@ Bilibili 风格视频平台 MVP，一天内通过自然语言描述完成最小�
 - 首页视频卡片网格布局
 - 视频播放页（循环/单次/自动连播三种模式）
 - 视频切换（上一个/下一个，PlaylistComponent 原生按钮 + 键盘 ←→）
+- 播放模式用户偏好设置（视频和图文共享，按用户保存到数据库，未登录 fallback 到 localStorage）
+- 图文播放器播放模式支持（循环/单次/自动连播，右上角模式切换按钮，播完后按模式决定行为）
 - 播放器点击暂停（白名单方式，只在 <video> 元素上触发，移动端双击暂停）
 - 图文播放器左右切换按钮不误触发暂停
 - 图文播放器底部图片进度条（每张图片一段，播放时白色逐渐填充，暂停就地冻结，手动切换满白，恢复重播归零）
@@ -128,6 +130,7 @@ Bilibili 风格视频平台 MVP，一天内通过自然语言描述完成最小�
 ### 状态管理优化
 - **类型安全的 sessionStorage 信号** — `src/lib/signals.ts` 封装 `autoPlayVideo`/`highlightComment` 两个跨页面信号，消除硬编码字符串键拼写错误风险
 - **VOD auth 缓存模块** — `src/lib/vod-cache.ts` 将 `globalThis.__vodAuthCache` 提取为独立模块（`getVodPlayAuth()` 函数 + 60秒 TTL），提供类型安全的缓存接口
+- **播放模式共享模块** — `src/lib/play-mode.ts` 导出 `PlayMode` 类型、`MODES` 常量、`fetchPlayMode()`/`updatePlayMode()`，视频和图文播放器共用，登录用户通过 API 读写数据库，未登录 fallback 到 localStorage
 - **VideoPlaySection useReducer** — 8 个独立 `useState` 合并为 `useReducer`（`VideoState` + `VideoAction` + `videoReducer`），`onVideoChange` 回调从 8 行 setter 简化为 1 行 dispatch
 
 ### 音频响度标准化
@@ -211,6 +214,7 @@ H:\bilibili/
 │   │       │   └── favorites/       # 收藏管理
 │   │       └── user/                # 用户相关
 │   │           ├── profile/         # 个人信息
+│   │           ├── play-mode/       # 播放模式偏好（GET/PUT）
 │   │           ├── uploads/         # 我的投稿
 │   │           ├── favorites/       # 我的收藏
 │   │           ├── likes/           # 我的点赞
@@ -251,6 +255,7 @@ H:\bilibili/
 │   │   ├── fetch-cache.ts           # 客户端 fetch 缓存工具（TTL + Map 缓存）
 │   │   ├── signals.ts               # 类型安全的 sessionStorage 信号工具
 │   │   ├── vod-cache.ts             # VOD playAuth 缓存模块（60秒 TTL）
+│   │   ├── play-mode.ts             # 播放模式共享模块（视频和图文统一）
 │   │   ├── audio-normalize.ts       # FFmpeg 音频响度标准化服务
 │   │   └── audio-queue.ts           # 音频处理异步队列（内存队列 + Worker）
 │   ├── instrumentation.ts           # 服务器启动时初始化音频队列处理器
@@ -278,6 +283,9 @@ H:\bilibili/
 - id: 主键 (cuid)
 - name: 用户名（唯一）
 - password: 密码（哈希存储）
+- role: 角色（默认 "user"）
+- playMode: 播放模式偏好（默认 "loop"，可选 "loop"/"single"/"next"，视频和图文共享）
+- tokenVersion: 会话版本号（修改密码时递增，用于使旧会话失效）
 - avatar: 头像（可选）
 - createdAt: 创建时间
 
