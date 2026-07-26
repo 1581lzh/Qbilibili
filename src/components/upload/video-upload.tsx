@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import EmojiPicker from "@/components/ui/emoji-picker";
+import { insertTextAtCursor } from "@/lib/emoji";
 
 interface VideoUploadPageProps {
   title: string;
@@ -36,6 +38,8 @@ export function VideoUploadPage({
   const [thumbPreview, setThumbPreview] = useState("");
   const videoInputRef = useRef<HTMLInputElement>(null);
   const thumbInputRef = useRef<HTMLInputElement>(null);
+  const titleRef = useRef<HTMLInputElement>(null);
+  const descRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (file) {
@@ -139,6 +143,7 @@ export function VideoUploadPage({
             视频标题 *
           </label>
           <input
+            ref={titleRef}
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -146,7 +151,10 @@ export function VideoUploadPage({
             maxLength={80}
             className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"
           />
-          <p className="mt-1 text-xs text-zinc-400">{title.length}/80</p>
+          <div className="mt-1 flex items-center justify-between">
+            <EmojiPicker onSelect={(emoji) => insertTextAtCursor(titleRef, emoji)} />
+            <p className="text-xs text-zinc-400">{title.length}/80</p>
+          </div>
         </div>
 
         {/* Description */}
@@ -155,12 +163,16 @@ export function VideoUploadPage({
             视频简介
           </label>
           <textarea
+            ref={descRef}
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             placeholder="添加视频简介（选填）"
             rows={4}
             className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"
           />
+          <div className="mt-1">
+            <EmojiPicker onSelect={(emoji) => insertTextAtCursor(descRef, emoji)} />
+          </div>
         </div>
 
         {/* Thumbnail upload */}

@@ -8,6 +8,9 @@ import { consumeHighlightComment } from "@/lib/signals";
 import CommentImages from "./comment-images";
 import { ImageLightbox } from "./image-lightbox";
 import { compressImage, formatFileSize } from "@/lib/image-compress";
+import EmojiPicker from "@/components/ui/emoji-picker";
+import { insertTextAtCursor } from "@/lib/emoji";
+import { replaceBilibiliEmoji } from "@/lib/emoji-data";
 
 interface Author {
   id: string;
@@ -641,7 +644,7 @@ export default function CommentSection({ videoId }: { videoId: string }) {
               <span className="text-xs text-zinc-400">
                 回复 @{reply.replyToName}
                 {reply.replyToContent && reply.replyToContent.trim().length > 0
-                  ? ` ${reply.replyToContent.slice(0, 4)}${reply.replyToContent.length > 4 ? "..." : ""}`
+                  ? ` ${replaceBilibiliEmoji(reply.replyToContent.slice(0, 4))}${reply.replyToContent.length > 4 ? "..." : ""}`
                   : reply.replyToImages && reply.replyToImages > 0
                     ? ` 图片x${reply.replyToImages}`
                     : ""
@@ -649,7 +652,7 @@ export default function CommentSection({ videoId }: { videoId: string }) {
               </span>
             )}
             <span className="text-sm text-zinc-700 dark:text-zinc-300">
-              {reply.content}
+              {replaceBilibiliEmoji(reply.content)}
             </span>
           </div>
           {reply.images && reply.images.length > 0 && (
@@ -685,6 +688,9 @@ export default function CommentSection({ videoId }: { videoId: string }) {
         {replyTo === reply.id && (
           <div className="ml-6 mt-2 sm:ml-10">
             <div className="rounded-lg border border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-800">
+              <div className="flex items-center px-2.5 pt-2 sm:px-3">
+                <EmojiPicker onSelect={(emoji) => insertTextAtCursor(replyTextareaRef, emoji)} />
+              </div>
               <textarea
                 ref={replyTextareaRef}
                 value={replyContent}
@@ -794,6 +800,9 @@ export default function CommentSection({ videoId }: { videoId: string }) {
       {session?.user ? (
         <form onSubmit={handleSubmit} className="mb-4 sm:mb-6">
           <div className="rounded-lg border border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-800">
+            <div className="flex items-center px-2.5 pt-2 sm:px-3">
+              <EmojiPicker onSelect={(emoji) => insertTextAtCursor(textareaRef, emoji)} />
+            </div>
             <textarea
               ref={textareaRef}
               value={content}
@@ -928,7 +937,7 @@ export default function CommentSection({ videoId }: { videoId: string }) {
                   )}
                 </div>
                 <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">
-                  {comment.content}
+                  {replaceBilibiliEmoji(comment.content)}
                 </p>
                 {comment.images && comment.images.length > 0 && (
                   <CommentImages
@@ -963,6 +972,9 @@ export default function CommentSection({ videoId }: { videoId: string }) {
               {replyTo === comment.id && (
                 <div className="ml-6 mt-2 sm:ml-10">
                   <div className="rounded-lg border border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-800">
+                    <div className="flex items-center px-2.5 pt-2 sm:px-3">
+                      <EmojiPicker onSelect={(emoji) => insertTextAtCursor(replyTextareaRef, emoji)} />
+                    </div>
                     <textarea
                       ref={replyTextareaRef}
                       value={replyContent}

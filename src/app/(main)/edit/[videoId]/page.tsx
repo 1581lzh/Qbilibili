@@ -6,6 +6,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import { useAuthModal } from "@/components/auth/auth-modal-context";
 import { optimizedCover } from "@/lib/image";
+import EmojiPicker from "@/components/ui/emoji-picker";
+import { insertTextAtCursor } from "@/lib/emoji";
 
 interface VideoData {
   id: string;
@@ -44,6 +46,8 @@ export default function EditVideoPage() {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [selectedCoverIndex, setSelectedCoverIndex] = useState<number | null>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
+  const titleRef = useRef<HTMLInputElement>(null);
+  const descRef = useRef<HTMLTextAreaElement>(null);
 
   // Cleanup cover preview on unmount
   useEffect(() => {
@@ -260,6 +264,7 @@ export default function EditVideoPage() {
               标题 *
             </label>
             <input
+              ref={titleRef}
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -267,8 +272,11 @@ export default function EditVideoPage() {
               className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 focus:border-[#FB7299] focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
               placeholder="请输入标题"
             />
-            <div className="mt-1 text-right text-xs text-zinc-400">
-              {title.length}/100
+            <div className="mt-1 flex items-center justify-between">
+              <EmojiPicker onSelect={(emoji) => insertTextAtCursor(titleRef, emoji)} />
+              <div className="text-right text-xs text-zinc-400">
+                {title.length}/100
+              </div>
             </div>
           </div>
 
@@ -278,6 +286,7 @@ export default function EditVideoPage() {
               描述
             </label>
             <textarea
+              ref={descRef}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               maxLength={2000}
@@ -285,8 +294,11 @@ export default function EditVideoPage() {
               className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 focus:border-[#FB7299] focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
               placeholder="请输入描述（可选）"
             />
-            <div className="mt-1 text-right text-xs text-zinc-400">
-              {description.length}/2000
+            <div className="mt-1 flex items-center justify-between">
+              <EmojiPicker onSelect={(emoji) => insertTextAtCursor(descRef, emoji)} />
+              <div className="text-right text-xs text-zinc-400">
+                {description.length}/2000
+              </div>
             </div>
           </div>
 
