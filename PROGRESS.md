@@ -324,6 +324,9 @@
 - **视频卡片冗余逻辑清理** — 移除永远不会触发的"无封面"分支（`coverUrl` 是必填字段）
 - **播放器点击暂停修复** — 旧代码用黑名单排除 `.prism-controlbar` 等元素，但 Aliplayer 的 `.prism-volume-control` 等控件不在 `.prism-controlbar` 内部，导致点击音量条/按钮等控件时误触发播放/暂停。修复为白名单方式：`click` 和 `touchend` 只在 `e.target === player.tag`（即直接点击 `<video>` 元素）时才切换播放/暂停。同时恢复 `touchstart` 的 `e.preventDefault()` 阻止移动端浏览器合成 `click` 事件，确保移动端保持双击暂停行为
 - **图文播放器按钮点击修复** — 图文播放器的 `onClick` 处理器在容器上无条件调用 `togglePlay()`，React 的 `stopPropagation` 无法阻止原生事件冒泡，导致点击左右切换按钮/播放按钮时也会触发暂停。修复为在容器 `onClick` 中检查 `e.target` 是否为 `button` 或 `a` 元素，是则跳过
+- **图文播放器单音频循环播放声音丢失修复** — 图文播放器在单音频循环播放模式下，音频播放完毕后声音丢失，修复为循环播放时正确重置音频状态
+- **Next.js 版本升级到 16.2.12** — 从 next@16.2.9 升级到 next@16.2.12，同步升级 eslint-config-next
+- **构建内存限制** — `package.json` 的 build 脚本添加 `NODE_OPTIONS="--max-old-space-size=1536"`，限制 Node.js 最大内存 1.5GB，防止小内存机器构建时 Swap 卡死
 
 ### 性能优化（本次会话）
 - **搜索 API 全表扫描优化** — 搜索从加载全部评论/视频到内存再过滤，改为数据库 `LIKE` 预过滤+内存高亮定位，大幅减少内存占用

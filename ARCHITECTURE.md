@@ -394,6 +394,7 @@ npm run dev
    ```bash
    npm run build
    ```
+   > `package.json` 中 build 脚本已配置 `NODE_OPTIONS="--max-old-space-size=1536"`，限制 Node.js 最大内存 1.5GB，防止小内存机器（≤4GB）构建时 Swap 卡死。如遇构建卡死，可临时添加 `TURBOPACK=0` 禁用 Turbopack。
 
 2. **上传文件到服务器**
    - 上传 `.next` 文件夹
@@ -483,7 +484,7 @@ sudo firewall-cmd --reload
 ## 依赖包说明
 
 ### 核心依赖
-- `next@16.2.9` — Next.js 框架
+- `next@16.2.12` — Next.js 框架
 - `react@19.1.0` — React 库
 - `react-dom@19.1.0` — React DOM
 - `next-auth@5.0.0-beta.28` — 认证系统
@@ -518,7 +519,7 @@ sudo firewall-cmd --reload
 ### 开发工具
 - `typescript@5.8.3` (dev) — TypeScript 编译器
 - `eslint@9.25.1` (dev) — 代码检查
-- `eslint-config-next@16.2.9` (dev) — Next.js ESLint 配置
+- `eslint-config-next@16.2.12` (dev) — Next.js ESLint 配置
 
 ## MVP 功能范围
 
