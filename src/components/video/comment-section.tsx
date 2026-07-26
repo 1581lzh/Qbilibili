@@ -690,23 +690,21 @@ export default function CommentSection({ videoId }: { videoId: string }) {
         {replyTo === reply.id && (
           <div className="ml-6 mt-2 sm:ml-10">
             <div className="rounded-lg border border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-800">
-              <div className="flex items-start px-2 pt-2 sm:px-3">
-                <EmojiPicker onSelect={(emoji) => insertTextAtCursor(replyTextareaRef, emoji)} />
-                <textarea
-                  ref={replyTextareaRef}
-                  value={replyContent}
-                  onChange={handleReplyTextareaInput}
-                  onPaste={handleReplyPaste}
-                  placeholder={`回复 @${replyTargetName}`}
-                  maxLength={MAX_COMMENT_LENGTH + 100}
-                  className="min-h-[40px] flex-1 resize-none bg-transparent px-2 py-1 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none dark:text-zinc-100 dark:placeholder-zinc-500"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      handleReply(reply.id);
-                    }
-                  }}
-                />
+              <textarea
+                ref={replyTextareaRef}
+                value={replyContent}
+                onChange={handleReplyTextareaInput}
+                onPaste={handleReplyPaste}
+                placeholder={`回复 @${replyTargetName}`}
+                maxLength={MAX_COMMENT_LENGTH + 100}
+                className="w-full resize-none bg-transparent px-3 pt-2 pb-1 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none dark:text-zinc-100 dark:placeholder-zinc-500"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleReply(reply.id);
+                  }
+                }}
+              />
                 {replyImagePreviews.length > 0 && (
                   <div className="flex gap-1.5 px-2.5 pb-2 sm:px-3">
                     {replyImagePreviews.map((src, i) => (
@@ -730,35 +728,37 @@ export default function CommentSection({ videoId }: { videoId: string }) {
                   </div>
                 )}
               </div>
-              <div className="flex items-center justify-end gap-1 border-t border-zinc-200 px-2 py-1 dark:border-zinc-700 sm:px-2.5 sm:py-1.5">
-                <button
-                  type="button"
-                  onClick={() => replyFileInputRef.current?.click()}
-                  disabled={replySelectedImages.length >= MAX_IMAGES}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 disabled:opacity-50 dark:hover:bg-zinc-700 dark:hover:text-zinc-300"
-                  title={replySelectedImages.length > 0 ? `已选 ${replySelectedImages.length}/${MAX_IMAGES} 张图片` : "插入图片"}
-                >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                    <circle cx="8.5" cy="8.5" r="1.5" />
-                    <polyline points="21 15 16 10 5 21" />
-                  </svg>
-                </button>
-                <input
-                  ref={replyFileInputRef}
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handleReplyImageSelect}
-                  className="hidden"
-                />
-                {replyOverLimit ? (
-                  <span className="flex h-7 w-7 items-center justify-center text-xs font-medium text-red-500">
-                    -{replyOverCount}
-                  </span>
-                ) : (
+              <div className="flex items-center justify-between border-t border-zinc-200 px-2 py-1 dark:border-zinc-700 sm:px-2.5 sm:py-1.5">
+                <EmojiPicker onSelect={(emoji) => insertTextAtCursor(replyTextareaRef, emoji)} />
+                <div className="flex items-center gap-1">
                   <button
-                    onClick={() => handleReply(reply.id)}
+                    type="button"
+                    onClick={() => replyFileInputRef.current?.click()}
+                    disabled={replySelectedImages.length >= MAX_IMAGES}
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 disabled:opacity-50 dark:hover:bg-zinc-700 dark:hover:text-zinc-300"
+                    title={replySelectedImages.length > 0 ? `已选 ${replySelectedImages.length}/${MAX_IMAGES} 张图片` : "插入图片"}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                      <circle cx="8.5" cy="8.5" r="1.5" />
+                      <polyline points="21 15 16 10 5 21" />
+                    </svg>
+                  </button>
+                  <input
+                    ref={replyFileInputRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleReplyImageSelect}
+                    className="hidden"
+                  />
+                  {replyOverLimit ? (
+                    <span className="flex h-7 w-7 items-center justify-center text-xs font-medium text-red-500">
+                      -{replyOverCount}
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => handleReply(reply.id)}
                     disabled={replyLoading || (!replyContent.trim() && replySelectedImages.length === 0)}
                     className="flex h-7 w-7 items-center justify-center rounded-full bg-[#FB7299] text-white hover:bg-[#FC8AB1] disabled:opacity-50"
                   >
@@ -800,24 +800,21 @@ export default function CommentSection({ videoId }: { videoId: string }) {
       {session?.user ? (
         <form onSubmit={handleSubmit} className="mb-4 sm:mb-6">
           <div className="rounded-lg border border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-800">
-            <div className="flex items-start px-2 pt-2 sm:px-3">
-              <EmojiPicker onSelect={(emoji) => insertTextAtCursor(textareaRef, emoji)} />
-              <textarea
-                ref={textareaRef}
-                value={content}
-                onChange={handleTextareaInput}
-                onPaste={handlePaste}
-                placeholder="发一条友善的评论"
-                maxLength={MAX_COMMENT_LENGTH + 100}
-                className="min-h-[60px] flex-1 resize-none bg-transparent px-2 py-1 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none dark:text-zinc-100 dark:placeholder-zinc-500"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSubmit(e as any);
-                  }
-                }}
-              />
-            </div>
+            <textarea
+              ref={textareaRef}
+              value={content}
+              onChange={handleTextareaInput}
+              onPaste={handlePaste}
+              placeholder="发一条友善的评论"
+              maxLength={MAX_COMMENT_LENGTH + 100}
+              className="w-full resize-none bg-transparent px-3 pt-3 pb-1 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none dark:text-zinc-100 dark:placeholder-zinc-500"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmit(e as any);
+                }
+              }}
+            />
             {imagePreviews.length > 0 && (
               <div className="flex gap-1.5 px-2.5 pb-2 sm:px-3">
                 {imagePreviews.map((src, i) => (
@@ -840,34 +837,36 @@ export default function CommentSection({ videoId }: { videoId: string }) {
                 ))}
               </div>
             )}
-            <div className="flex items-center justify-end gap-1 border-t border-zinc-200 px-2 py-1.5 dark:border-zinc-700 sm:px-2.5 sm:py-2">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                disabled={selectedImages.length >= MAX_IMAGES}
-                className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 disabled:opacity-50 dark:hover:bg-zinc-700 dark:hover:text-zinc-300"
-                title={selectedImages.length > 0 ? `已选 ${selectedImages.length}/${MAX_IMAGES} 张图片` : "插入图片"}
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                  <circle cx="8.5" cy="8.5" r="1.5" />
-                  <polyline points="21 15 16 10 5 21" />
-                </svg>
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={handleImageSelect}
-                className="hidden"
-              />
-              {commentOverLimit ? (
-                <span className="flex h-8 w-8 items-center justify-center text-sm font-medium text-red-500">
-                  -{commentOverCount}
-                </span>
-              ) : (
+            <div className="flex items-center justify-between border-t border-zinc-200 px-2 py-1.5 dark:border-zinc-700 sm:px-2.5 sm:py-2">
+              <EmojiPicker onSelect={(emoji) => insertTextAtCursor(textareaRef, emoji)} />
+              <div className="flex items-center gap-1">
                 <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={selectedImages.length >= MAX_IMAGES}
+                  className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 disabled:opacity-50 dark:hover:bg-zinc-700 dark:hover:text-zinc-300"
+                  title={selectedImages.length > 0 ? `已选 ${selectedImages.length}/${MAX_IMAGES} 张图片` : "插入图片"}
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <polyline points="21 15 16 10 5 21" />
+                  </svg>
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleImageSelect}
+                  className="hidden"
+                />
+                {commentOverLimit ? (
+                  <span className="flex h-8 w-8 items-center justify-center text-sm font-medium text-red-500">
+                    -{commentOverCount}
+                  </span>
+                ) : (
+                  <button
                   type="submit"
                   disabled={loading || uploadingImages || !canSubmit}
                   className="flex h-8 w-8 items-center justify-center rounded-full bg-[#FB7299] text-white hover:bg-[#FC8AB1] disabled:opacity-50"
@@ -884,6 +883,7 @@ export default function CommentSection({ videoId }: { videoId: string }) {
                   )}
                 </button>
               )}
+              </div>
             </div>
           </div>
         </form>

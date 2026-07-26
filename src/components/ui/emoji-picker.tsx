@@ -322,7 +322,7 @@ export default function EmojiPicker({ onSelect }: EmojiPickerProps) {
                       alt={e.label}
                       className="h-6 w-6"
                       draggable={false}
-                      loading={i < 24 ? "eager" : "lazy"}
+                      loading={i < 64 ? "eager" : "lazy"}
                       decoding="async"
                     />
                   ) : (

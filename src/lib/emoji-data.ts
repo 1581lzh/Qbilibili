@@ -615,8 +615,8 @@ export function replaceBilibiliEmoji(text: string): string {
 // 渲染 emoji 文本：抖音表情用图片，B站格式转 Unicode
 // 返回 HTML 字符串，用于 dangerouslySetInnerHTML
 export function renderEmojiText(text: string): string {
-  // 先导入抖音表情映射
-  const { DOUYIN_EMOJI_MAP } = require("./douyin-emoji-data");
+  // 动态导入避免循环依赖
+  const { DOUYIN_EMOJI_MAP } = require("@/lib/douyin-emoji-data") as typeof import("./douyin-emoji-data");
 
   return text.replace(/\[([^\]]+)\]/g, (match) => {
     // 优先匹配抖音表情（返回 img 标签）
