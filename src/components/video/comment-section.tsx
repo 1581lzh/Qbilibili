@@ -690,24 +690,21 @@ export default function CommentSection({ videoId }: { videoId: string }) {
         {replyTo === reply.id && (
           <div className="ml-6 mt-2 sm:ml-10">
             <div className="rounded-lg border border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-800">
-              <div className="flex items-start px-2 pt-2 sm:px-3">
-                <EmojiPicker onSelect={(emoji) => insertTextAtCursor(replyTextareaRef, emoji)} />
-                <textarea
-                  ref={replyTextareaRef}
-                  value={replyContent}
-                  onChange={handleReplyTextareaInput}
-                  onPaste={handleReplyPaste}
-                  placeholder={`回复 @${replyTargetName}`}
-                  maxLength={MAX_COMMENT_LENGTH + 100}
-                  className="min-h-[40px] flex-1 resize-none bg-transparent px-2 py-1 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none dark:text-zinc-100 dark:placeholder-zinc-500"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      handleReply(reply.id);
-                    }
-                  }}
-                />
-              </div>
+              <textarea
+                ref={replyTextareaRef}
+                value={replyContent}
+                onChange={handleReplyTextareaInput}
+                onPaste={handleReplyPaste}
+                placeholder={`回复 @${replyTargetName}`}
+                maxLength={MAX_COMMENT_LENGTH + 100}
+                className="w-full resize-none bg-transparent px-3 pt-2 pb-1 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none dark:text-zinc-100 dark:placeholder-zinc-500"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleReply(reply.id);
+                  }
+                }}
+              />
               {replyImagePreviews.length > 0 && (
                 <div className="flex gap-1.5 px-2.5 pb-2 sm:px-3">
                   {replyImagePreviews.map((src, i) => (
@@ -731,6 +728,7 @@ export default function CommentSection({ videoId }: { videoId: string }) {
                 </div>
               )}
               <div className="flex items-center justify-end gap-1 border-t border-zinc-200 px-2 py-1 dark:border-zinc-700 sm:px-2.5 sm:py-1.5">
+                <EmojiPicker onSelect={(emoji) => insertTextAtCursor(replyTextareaRef, emoji)} />
                 <button
                     type="button"
                     onClick={() => replyFileInputRef.current?.click()}
@@ -800,24 +798,21 @@ export default function CommentSection({ videoId }: { videoId: string }) {
       {session?.user ? (
         <form onSubmit={handleSubmit} className="mb-4 sm:mb-6">
           <div className="rounded-lg border border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-800">
-            <div className="flex items-start px-2 pt-2 sm:px-3">
-              <EmojiPicker onSelect={(emoji) => insertTextAtCursor(textareaRef, emoji)} />
-              <textarea
-                ref={textareaRef}
-                value={content}
-                onChange={handleTextareaInput}
-                onPaste={handlePaste}
-                placeholder="发一条友善的评论"
-                maxLength={MAX_COMMENT_LENGTH + 100}
-                className="min-h-[60px] flex-1 resize-none bg-transparent px-2 py-1 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none dark:text-zinc-100 dark:placeholder-zinc-500"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleSubmit(e as any);
-                  }
-                }}
-              />
-            </div>
+            <textarea
+              ref={textareaRef}
+              value={content}
+              onChange={handleTextareaInput}
+              onPaste={handlePaste}
+              placeholder="发一条友善的评论"
+              maxLength={MAX_COMMENT_LENGTH + 100}
+              className="w-full resize-none bg-transparent px-3 pt-3 pb-1 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none dark:text-zinc-100 dark:placeholder-zinc-500"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmit(e as any);
+                }
+              }}
+            />
             {imagePreviews.length > 0 && (
               <div className="flex gap-1.5 px-2.5 pb-2 sm:px-3">
                 {imagePreviews.map((src, i) => (
@@ -841,6 +836,7 @@ export default function CommentSection({ videoId }: { videoId: string }) {
               </div>
             )}
             <div className="flex items-center justify-end gap-1 border-t border-zinc-200 px-2 py-1.5 dark:border-zinc-700 sm:px-2.5 sm:py-2">
+              <EmojiPicker onSelect={(emoji) => insertTextAtCursor(textareaRef, emoji)} />
               <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
