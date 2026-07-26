@@ -690,48 +690,46 @@ export default function CommentSection({ videoId }: { videoId: string }) {
         {replyTo === reply.id && (
           <div className="ml-6 mt-2 sm:ml-10">
             <div className="rounded-lg border border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-800">
-              <div className="flex items-center px-2.5 pt-2 sm:px-3">
+              <div className="flex items-start px-2 pt-2 sm:px-3">
                 <EmojiPicker onSelect={(emoji) => insertTextAtCursor(replyTextareaRef, emoji)} />
-              </div>
-              <textarea
-                ref={replyTextareaRef}
-                value={replyContent}
-                onChange={handleReplyTextareaInput}
-                onPaste={handleReplyPaste}
-                placeholder={`回复 @${replyTargetName}`}
-                maxLength={MAX_COMMENT_LENGTH + 100}
-                className="w-full resize-none bg-transparent p-2.5 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none dark:text-zinc-100 dark:placeholder-zinc-500 sm:p-3 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-300 [&::-webkit-scrollbar-track]:bg-transparent dark:[&::-webkit-scrollbar-thumb]:bg-zinc-600"
-                rows={1}
-                style={{ minHeight: "40px", overflow: "hidden" }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) {
-                    e.preventDefault();
-                    handleReply(reply.id);
-                  }
-                }}
-              />
-              {replyImagePreviews.length > 0 && (
-                <div className="flex gap-1.5 px-2.5 pb-2 sm:px-3">
-                  {replyImagePreviews.map((src, i) => (
-                    <motion.div
-                      key={i}
-                      initial={{ scale: 0.8, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      exit={{ scale: 0.8, opacity: 0 }}
-                      className="group relative h-12 w-12 overflow-hidden rounded-md sm:h-14 sm:w-14"
-                    >
-                      <img src={src} alt="" className="h-full w-full object-cover" />
-                      <button
-                        type="button"
-                        onClick={() => removeReplyImage(i)}
-                        className="absolute right-0.5 top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-black/60 text-[8px] text-white opacity-0 transition-opacity group-hover:opacity-100"
+                <textarea
+                  ref={replyTextareaRef}
+                  value={replyContent}
+                  onChange={handleReplyTextareaInput}
+                  onPaste={handleReplyPaste}
+                  placeholder={`回复 @${replyTargetName}`}
+                  maxLength={MAX_COMMENT_LENGTH + 100}
+                  className="min-h-[40px] flex-1 resize-none bg-transparent px-2 py-1 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none dark:text-zinc-100 dark:placeholder-zinc-500"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleReply(reply.id);
+                    }
+                  }}
+                />
+                {replyImagePreviews.length > 0 && (
+                  <div className="flex gap-1.5 px-2.5 pb-2 sm:px-3">
+                    {replyImagePreviews.map((src, i) => (
+                      <motion.div
+                        key={i}
+                        initial={{ scale: 0.8, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        exit={{ scale: 0.8, opacity: 0 }}
+                        className="group relative h-12 w-12 overflow-hidden rounded-md sm:h-14 sm:w-14"
                       >
-                        ×
-                      </button>
-                    </motion.div>
-                  ))}
-                </div>
-              )}
+                        <img src={src} alt="" className="h-full w-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => removeReplyImage(i)}
+                          className="absolute right-0.5 top-0.5 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-black/60 text-[8px] text-white opacity-0 transition-opacity group-hover:opacity-100"
+                        >
+                          ×
+                        </button>
+                      </motion.div>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="flex items-center justify-end gap-1 border-t border-zinc-200 px-2 py-1 dark:border-zinc-700 sm:px-2.5 sm:py-1.5">
                 <button
                   type="button"
@@ -802,26 +800,24 @@ export default function CommentSection({ videoId }: { videoId: string }) {
       {session?.user ? (
         <form onSubmit={handleSubmit} className="mb-4 sm:mb-6">
           <div className="rounded-lg border border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-800">
-            <div className="flex items-center px-2.5 pt-2 sm:px-3">
+            <div className="flex items-start px-2 pt-2 sm:px-3">
               <EmojiPicker onSelect={(emoji) => insertTextAtCursor(textareaRef, emoji)} />
+              <textarea
+                ref={textareaRef}
+                value={content}
+                onChange={handleTextareaInput}
+                onPaste={handlePaste}
+                placeholder="发一条友善的评论"
+                maxLength={MAX_COMMENT_LENGTH + 100}
+                className="min-h-[60px] flex-1 resize-none bg-transparent px-2 py-1 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none dark:text-zinc-100 dark:placeholder-zinc-500"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSubmit(e as any);
+                  }
+                }}
+              />
             </div>
-            <textarea
-              ref={textareaRef}
-              value={content}
-              onChange={handleTextareaInput}
-              onPaste={handlePaste}
-              placeholder="发一条友善的评论"
-              maxLength={MAX_COMMENT_LENGTH + 100}
-              className="w-full resize-none bg-transparent p-2.5 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none dark:text-zinc-100 dark:placeholder-zinc-500 sm:p-3 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-300 [&::-webkit-scrollbar-track]:bg-transparent dark:[&::-webkit-scrollbar-thumb]:bg-zinc-600"
-              rows={3}
-              style={{ minHeight: "80px", overflow: "hidden" }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSubmit(e as any);
-                }
-              }}
-            />
             {imagePreviews.length > 0 && (
               <div className="flex gap-1.5 px-2.5 pb-2 sm:px-3">
                 {imagePreviews.map((src, i) => (
