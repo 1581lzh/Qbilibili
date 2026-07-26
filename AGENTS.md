@@ -49,6 +49,7 @@ Bilibili 风格视频平台 MVP，一天内通过自然语言描述完成最小�
 - 基础互动（点赞视频/评论、收藏、评论回复）
 - 播放/暂停中心弹性动画
 - 用户注销功能（自定义确认弹窗，密码确认，递归删除所有数据）
+- Emoji 支持（评论/投稿支持 Unicode emoji 和抖音表情包，选择器面板分类浏览+搜索，contentEditable 实时预览，B站格式 `:表情名:` 兼容）
 
 ### 动画系统（Framer Motion）
 - 首页/搜索结果视频卡片 staggered fade-in 入场
@@ -228,7 +229,8 @@ H:\bilibili/
 │   │   │   ├── auth-modal-context.tsx  # 认证弹窗 Context
 │   │   │   └── auth-modal.tsx          # 登录/注册弹窗组件
 │   │   ├── ui/                      # 通用 UI 组件
-│   │   │   └── confirm-dialog.tsx      # 确认弹窗组件
+│   │   │   ├── confirm-dialog.tsx      # 确认弹窗组件
+│   │   │   └── emoji-picker.tsx        # Emoji 选择器面板（Unicode + 抖音表情包）
 │   │   ├── layout/
 │   │   │   └── header.tsx           # 顶部导航（移动端搜索展开动画/深色切换/头像菜单）
 │   │   ├── video/
@@ -257,7 +259,10 @@ H:\bilibili/
 │   │   ├── vod-cache.ts             # VOD playAuth 缓存模块（60秒 TTL）
 │   │   ├── play-mode.ts             # 播放模式共享模块（视频和图文统一）
 │   │   ├── audio-normalize.ts       # FFmpeg 音频响度标准化服务
-│   │   └── audio-queue.ts           # 音频处理异步队列（内存队列 + Worker）
+│   │   ├── audio-queue.ts           # 音频处理异步队列（内存队列 + Worker）
+│   │   ├── emoji.ts                 # Emoji 工具函数（Unicode emoji 解析 + 抖音表情包匹配）
+│   │   ├── emoji-data.ts            # Unicode emoji 分类数据（按类别组织的 emoji 列表）
+│   │   └── douyin-emoji-data.ts     # 抖音表情包数据（214个表情，名称+图片映射）
 │   ├── instrumentation.ts           # 服务器启动时初始化音频队列处理器
 │   └── types/index.ts               # TypeScript 类型定义
 ├── prisma/
@@ -267,6 +272,8 @@ H:\bilibili/
 ├── public/                          # 静态资源
 │   ├── favicon.svg                  # 站点图标
 │   ├── placeholder.svg              # 视频封面占位图
+│   ├── emoji/                       # Emoji 表情图片
+│   │   └── douyin/                  # 抖音表情包图片（214个，PNG 格式）
 │   └── lib/                         # 浏览器端 SDK
 │       ├── aliyun-upload-sdk-1.5.7.min.js  # VOD 上传
 │       ├── aliplayercomponents.min.js       # PlaylistComponent 组件

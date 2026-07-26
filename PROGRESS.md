@@ -100,6 +100,12 @@
   - 回复评论：与主评论框功能完全一致（弹性延展、字数限制、图片上传）
   - 回复引用：显示被回复评论的预览（有文字显示前4字符，无文字显示图片数量）
   - 样式统一：子评论与父评论使用相同的字体大小和图标尺寸
+- **Emoji 支持功能** — 评论/投稿支持 Unicode emoji 和抖音表情包
+  - 选择器面板：emoji-picker.tsx 组件，分类浏览 + 搜索过滤，点击插入到评论框
+  - B站格式兼容：`:表情名:` 语法自动解析为 emoji 图片
+  - ContentEditable 实时预览：评论框使用 contentEditable 实现 emoji 图片实时渲染
+  - 抖音表情包：214 个表情，图片存储在 public/emoji/douyin/，数据定义在 douyin-emoji-data.ts
+  - Unicode emoji 数据：emoji-data.ts 按类别组织的完整 emoji 列表
 - **图文播放器 PC 端鼠标单击暂停修复** — 移除 ImageCarousel onClick 中的 `ontouchstart` 守卫，修复触摸屏笔记本（如 Surface Pro）用鼠标单击无法暂停图文播放的问题。旧代码通过 `"ontouchstart" in window` 检测设备类型并阻止 click，但在触摸屏 PC 上该检测为 true 导致鼠标 click 被误拦截。修复后与视频播放器对齐：始终绑定 click 事件，移动端通过 `touchstart.preventDefault()` 阻止合成 click，两种输入模式可共存
 - **图文播放修复** — 修复播放/暂停图标反转和音频自动播放问题
   - 图标反转修复：暂停时显示播放图标（▶），播放时显示暂停图标（⏸）

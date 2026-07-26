@@ -92,7 +92,8 @@ H:\bilibili/
 │   │   │   └── auth-modal.tsx          # 认证弹窗组件（next/dynamic 懒加载）
 │   │   ├── ui/                # 通用 UI 组件
 │   │   │   ├── confirm-dialog.tsx      # 确认弹窗组件（替代浏览器 confirm/alert）
-│   │   │   └── compress-dialog.tsx     # 图片/音乐压缩确认弹窗
+│   │   │   ├── compress-dialog.tsx     # 图片/音乐压缩确认弹窗
+│   │   │   └── emoji-picker.tsx        # Emoji 选择器面板（Unicode emoji + 抖音表情包）
 │   │   ├── layout/            # 布局组件
 │   │   │   └── header.tsx     # 页头组件（移动端搜索展开动画/深色切换/头像菜单）
 │   │   ├── providers.tsx      # 全局 Provider（AuthModal 通过 next/dynamic 懒加载）
@@ -129,7 +130,10 @@ H:\bilibili/
 │   │   ├── vod-cache.ts       # VOD playAuth 缓存模块（模块级 Map + 60秒 TTL）
 │   │   ├── play-mode.ts       # 播放模式共享模块（PlayMode 类型 + fetchPlayMode/updatePlayMode，视频/图文统一）
 │   │   ├── audio-normalize.ts # FFmpeg 音频响度标准化服务（EBU R128，-14 LUFS）
-│   │   └── audio-queue.ts     # 音频处理异步队列（内存队列 + Worker，5秒轮询）
+│   │   ├── audio-queue.ts     # 音频处理异步队列（内存队列 + Worker，5秒轮询）
+│   │   ├── emoji.ts           # Emoji 工具函数（Unicode emoji 解析 + 抖音表情包匹配）
+│   │   ├── emoji-data.ts      # Unicode emoji 分类数据（按类别组织的 emoji 列表）
+│   │   └── douyin-emoji-data.ts # 抖音表情包数据（214个表情，名称+图片映射）
 │   ├── instrumentation.ts     # 服务器启动时初始化音频队列处理器
 │   ├── types/                 # TypeScript 类型定义
 │   │   └── index.ts           # 共享类型（Video/VideoWithAuthor/Comment/Reply 等）
@@ -141,6 +145,8 @@ H:\bilibili/
 ├── public/                    # 静态资源
 │   ├── favicon.svg            # 站点图标（bilibili 风格播放按钮）
 │   ├── placeholder.svg        # 视频封面占位图（未上传封面时使用）
+│   ├── emoji/                 # Emoji 表情图片
+│   │   └── douyin/            # 抖音表情包图片（214个，PNG 格式）
 │   └── lib/                   # 浏览器端 SDK
 │       ├── aliyun-upload-sdk-1.5.7.min.js  # VOD 上传 SDK
 │       ├── aliplayercomponents.min.js       # Aliplayer PlaylistComponent 组件
@@ -560,6 +566,7 @@ sudo firewall-cmd --reload
 34. **评论图片附件** — 每条评论最多 7 张图片，文字可选；单图 4:3 大图，多图 1:1 方形缩略图网格；PC 端 4 列，移动端 3 列 + 溢出 "+N" 标记；全屏灯箱查看原图（键盘导航、ESC 关闭）
 35. **图文播放优化** — 播放/暂停图标正确显示（暂停显示▶，播放显示⏸）；浏览器阻止自动播放时自动降级到暂停状态，用户交互后恢复
 36. **音频响度标准化** — 上传视频后自动使用 FFmpeg loudnorm（EBU R128，-24 LUFS）标准化音频响度，支持 OSS 和 VOD 两种视频来源，异步队列处理，非阻塞播放；启动时自动回填未处理的旧视频
+37. **Emoji 支持** — 评论/投稿支持 Unicode emoji 和抖音表情包，emoji 选择器面板（分类浏览 + 搜索），contentEditable 实时预览 emoji 图片，抖音表情包 214 个（存储在 public/emoji/douyin/），B站格式兼容（`:表情名:`语法）
 
 - **图片轮播触摸处理** — ImageCarousel 组件（`video-play-section.tsx`）使用与视频播放器一致的原生 `addEventListener` 方式处理触摸事件。React 合成 `onTouchStart` 默认注册为 passive listener，`preventDefault()` 会被浏览器忽略，因此必须使用原生 API + `{ capture: true, passive: false }` 才能阻断 click 事件合成。所有回调通过 ref 访问（`togglePlayRef`、`handleManualSwitchRef`、`currentIndexRef`、`imagesLengthRef`），useEffect 依赖数组为空，避免状态变化导致监听器重建丢失 `lastTap` 时间戳。PC 端 click 处理器始终绑定（不使用 `ontouchstart` 守卫），与视频播放器对齐——移动端通过 `touchstart.preventDefault()` 阻止合成 click，触摸屏笔记本的鼠标和触摸两种输入模式可共存。
 - **中心蒙版图标样式统一** — ImageCarousel 的播放/暂停中心指示器使用与视频播放器 `.bili-anim` 完全一致的 SVG 图标：暂停图标使用 fill 实心 `<rect>`（非 stroke 描边 `<path>`），播放图标使用 fill `<polygon>`，均为 `fill="#fff"`、`viewBox="0 0 24 24"`、尺寸 `40%`（`h-2/5 w-2/5`）。
