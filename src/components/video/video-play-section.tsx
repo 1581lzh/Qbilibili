@@ -315,8 +315,8 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration, playMode, onNext }
     else {
       setCurrentAudioIndex(0);
       setTotalAudioDuration(0);
-      // Directly restart playback (setCurrentAudioIndex(0) may not trigger useEffect if already at 0)
-      if (audioRef.current) {
+      // Single audio: setCurrentAudioIndex(0) won't trigger useEffect (same value), force restart
+      if (audioUrlsRef.current.length <= 1 && audioRef.current) {
         audioRef.current.currentTime = 0;
         audioRef.current.play().catch(() => {});
       }
