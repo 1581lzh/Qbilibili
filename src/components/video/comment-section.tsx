@@ -9,7 +9,7 @@ import CommentImages from "./comment-images";
 import { ImageLightbox } from "./image-lightbox";
 import { compressImage, formatFileSize } from "@/lib/image-compress";
 import EmojiPicker from "@/components/ui/emoji-picker";
-import { insertTextAtCursor } from "@/lib/emoji";
+import { insertHtmlAtCursor, getContentEditableText, clearContentEditable } from "@/lib/emoji";
 import { renderEmojiText } from "@/lib/emoji-data";
 
 interface Author {
@@ -71,8 +71,8 @@ export default function CommentSection({ videoId }: { videoId: string }) {
   const [showLightbox, setShowLightbox] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const replyFileInputRef = useRef<HTMLInputElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const replyTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const textareaRef = useRef<HTMLDivElement>(null);
+  const replyTextareaRef = useRef<HTMLDivElement>(null);
 
   const MAX_COMMENT_LENGTH = 500;
   const MAX_TEXTAREA_LINES = 10;
@@ -359,8 +359,9 @@ export default function CommentSection({ videoId }: { videoId: string }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if ((!content.trim() && selectedImages.length === 0) || loading) return;
-    const input = content;
+    const currentContent = getContentEditableText(textareaRef);
+    if ((!currentContent.trim() && selectedImages.length === 0) || loading) return;
+    const input = currentContent;
     const tempImages = [...selectedImages];
     const tempId = `temp-${Date.now()}`;
     const tempComment: Comment = {
@@ -373,6 +374,7 @@ export default function CommentSection({ videoId }: { videoId: string }) {
       replies: [],
     };
     setComments((prev) => [tempComment, ...prev]);
+    clearContentEditable(textareaRef);
     setContent("");
     setSelectedImages([]);
     setImagePreviews([]);
@@ -423,8 +425,9 @@ export default function CommentSection({ videoId }: { videoId: string }) {
   };
 
   const handleReply = async (parentId: string) => {
-    if ((!replyContent.trim() && replySelectedImages.length === 0) || replyLoading) return;
-    const input = replyContent;
+    const currentReplyContent = getContentEditableText(replyTextareaRef);
+    if ((!currentReplyContent.trim() && replySelectedImages.length === 0) || replyLoading) return;
+    const input = currentReplyContent;
     const tempImages = [...replySelectedImages];
     const targetName = replyTargetName;
 
@@ -471,6 +474,7 @@ export default function CommentSection({ videoId }: { videoId: string }) {
         return c;
       })
     );
+    clearContentEditable(replyTextareaRef);
     setReplyContent("");
     setReplySelectedImages([]);
     setReplyImagePreviews([]);
@@ -690,20 +694,21 @@ export default function CommentSection({ videoId }: { videoId: string }) {
         {replyTo === reply.id && (
           <div className="ml-6 mt-2 sm:ml-10">
             <div className="rounded-lg border border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-800">
-              <textarea
+              <div
                 ref={replyTextareaRef}
-                value={replyContent}
-                onChange={handleReplyTextareaInput}
-                onPaste={handleReplyPaste}
-                placeholder={`回复 @${replyTargetName}`}
-                maxLength={MAX_COMMENT_LENGTH + 100}
-                className="w-full resize-none bg-transparent px-3 pt-2 pb-1 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none dark:text-zinc-100 dark:placeholder-zinc-500"
+                contentEditable
+                data-placeholder={`回复 @${replyTargetName}`}
+                onInput={(e) => {
+                  const text = e.currentTarget.textContent || "";
+                  setReplyContent(text);
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     handleReply(reply.id);
                   }
                 }}
+                className="max-h-[80px] min-h-[32px] w-full overflow-y-auto px-3 pt-2 pb-1 text-sm text-zinc-900 focus:outline-none dark:text-zinc-100 [&:empty]:before:pointer-events-none [&:empty]:before:text-zinc-400 [&:empty]:before:dark:text-zinc-500 [&[data-placeholder]:empty:before]:content-[attr(data-placeholder)]"
               />
               {replyImagePreviews.length > 0 && (
                 <div className="flex gap-1.5 px-2.5 pb-2 sm:px-3">
@@ -728,7 +733,13 @@ export default function CommentSection({ videoId }: { videoId: string }) {
                 </div>
               )}
               <div className="flex items-center justify-end gap-1 border-t border-zinc-200 px-2 py-1 dark:border-zinc-700 sm:px-2.5 sm:py-1.5">
-                <EmojiPicker onSelect={(emoji) => insertTextAtCursor(replyTextareaRef, emoji)} />
+                <EmojiPicker onSelect={(text, html) => {
+                  if (html) {
+                    insertHtmlAtCursor(replyTextareaRef, html);
+                  } else {
+                    insertHtmlAtCursor(replyTextareaRef, text);
+                  }
+                }} />
                 <button
                     type="button"
                     onClick={() => replyFileInputRef.current?.click()}
@@ -786,8 +797,17 @@ export default function CommentSection({ videoId }: { videoId: string }) {
     );
   };
 
-  const canSubmit = content.trim() || selectedImages.length > 0;
-  const canReply = replyContent.trim() || replySelectedImages.length > 0;
+  // 检查是否有内容（文本或 emoji 图片）
+  const hasContent = () => {
+    if (!textareaRef.current) return false;
+    // 检查是否有文本节点或子元素（img 标签等）
+    return textareaRef.current.childNodes.length > 0 && textareaRef.current.textContent?.trim() !== "";
+  };
+  const canSubmit = hasContent() || selectedImages.length > 0;
+  const canReply = () => {
+    if (!replyTextareaRef.current) return false;
+    return (replyTextareaRef.current.childNodes.length > 0 && replyTextareaRef.current.textContent?.trim() !== "") || replySelectedImages.length > 0;
+  };
 
   return (
     <div>
@@ -798,20 +818,22 @@ export default function CommentSection({ videoId }: { videoId: string }) {
       {session?.user ? (
         <form onSubmit={handleSubmit} className="mb-4 sm:mb-6">
           <div className="rounded-lg border border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-800">
-            <textarea
+            <div
               ref={textareaRef}
-              value={content}
-              onChange={handleTextareaInput}
-              onPaste={handlePaste}
-              placeholder="发一条友善的评论"
-              maxLength={MAX_COMMENT_LENGTH + 100}
-              className="w-full resize-none bg-transparent px-3 pt-3 pb-1 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none dark:text-zinc-100 dark:placeholder-zinc-500"
+              contentEditable
+              data-placeholder="发一条友善的评论"
+              onInput={(e) => {
+                // 获取纯文本（不含 img 标签的文本内容）
+                const text = e.currentTarget.textContent || "";
+                setContent(text);
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   handleSubmit(e as any);
                 }
               }}
+              className="max-h-[120px] min-h-[40px] w-full overflow-y-auto px-3 pt-3 pb-1 text-sm text-zinc-900 focus:outline-none dark:text-zinc-100 [&:empty]:before:pointer-events-none [&:empty]:before:text-zinc-400 [&:empty]:before:dark:text-zinc-500 [&[data-placeholder]:empty:before]:content-[attr(data-placeholder)]"
             />
             {imagePreviews.length > 0 && (
               <div className="flex gap-1.5 px-2.5 pb-2 sm:px-3">
@@ -836,7 +858,13 @@ export default function CommentSection({ videoId }: { videoId: string }) {
               </div>
             )}
             <div className="flex items-center justify-end gap-1 border-t border-zinc-200 px-2 py-1.5 dark:border-zinc-700 sm:px-2.5 sm:py-2">
-              <EmojiPicker onSelect={(emoji) => insertTextAtCursor(textareaRef, emoji)} />
+              <EmojiPicker onSelect={(text, html) => {
+                if (html) {
+                  insertHtmlAtCursor(textareaRef, html);
+                } else {
+                  insertHtmlAtCursor(textareaRef, text);
+                }
+              }} />
               <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
@@ -966,25 +994,21 @@ export default function CommentSection({ videoId }: { videoId: string }) {
               {replyTo === comment.id && (
                 <div className="ml-6 mt-2 sm:ml-10">
                   <div className="rounded-lg border border-zinc-300 bg-white dark:border-zinc-700 dark:bg-zinc-800">
-                    <div className="flex items-center px-2.5 pt-2 sm:px-3">
-                      <EmojiPicker onSelect={(emoji) => insertTextAtCursor(replyTextareaRef, emoji)} />
-                    </div>
-                    <textarea
+                    <div
                       ref={replyTextareaRef}
-                      value={replyContent}
-                      onChange={handleReplyTextareaInput}
-                      onPaste={handleReplyPaste}
-                      placeholder={`回复 @${replyTargetName}`}
-                      maxLength={MAX_COMMENT_LENGTH + 100}
-                      className="w-full resize-none bg-transparent p-2.5 text-sm text-zinc-900 placeholder-zinc-400 focus:outline-none dark:text-zinc-100 dark:placeholder-zinc-500 sm:p-3 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-zinc-300 [&::-webkit-scrollbar-track]:bg-transparent dark:[&::-webkit-scrollbar-thumb]:bg-zinc-600"
-                      rows={1}
-                      style={{ minHeight: "40px", overflow: "hidden" }}
+                      contentEditable
+                      data-placeholder={`回复 @${replyTargetName}`}
+                      onInput={(e) => {
+                        const text = e.currentTarget.textContent || "";
+                        setReplyContent(text);
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && !e.shiftKey) {
                           e.preventDefault();
                           handleReply(comment.id);
                         }
                       }}
+                      className="max-h-[80px] min-h-[32px] w-full overflow-y-auto px-3 pt-2 pb-1 text-sm text-zinc-900 focus:outline-none dark:text-zinc-100 [&:empty]:before:pointer-events-none [&:empty]:before:text-zinc-400 [&:empty]:before:dark:text-zinc-500 [&[data-placeholder]:empty:before]:content-[attr(data-placeholder)]"
                     />
                     {replyImagePreviews.length > 0 && (
                       <div className="flex gap-1.5 px-2.5 pb-2 sm:px-3">
@@ -1009,6 +1033,13 @@ export default function CommentSection({ videoId }: { videoId: string }) {
                       </div>
                     )}
                     <div className="flex items-center justify-end gap-1 border-t border-zinc-200 px-2 py-1 dark:border-zinc-700 sm:px-2.5 sm:py-1.5">
+                      <EmojiPicker onSelect={(text, html) => {
+                        if (html) {
+                          insertHtmlAtCursor(replyTextareaRef, html);
+                        } else {
+                          insertHtmlAtCursor(replyTextareaRef, text);
+                        }
+                      }} />
                       <button
                         type="button"
                         onClick={() => replyFileInputRef.current?.click()}
@@ -1037,7 +1068,7 @@ export default function CommentSection({ videoId }: { videoId: string }) {
                       ) : (
                         <button
                           onClick={() => handleReply(comment.id)}
-                          disabled={replyLoading || !canReply}
+                          disabled={replyLoading || !canReply()}
                           className="flex h-7 w-7 items-center justify-center rounded-full bg-[#FB7299] text-white hover:bg-[#FC8AB1] disabled:opacity-50"
                         >
                           {replyLoading ? (

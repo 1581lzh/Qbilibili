@@ -28,6 +28,53 @@ export function insertTextAtCursor(
   });
 }
 
+// 在 contentEditable div 光标位置插入 HTML
+export function insertHtmlAtCursor(
+  ref: React.RefObject<HTMLDivElement | null>,
+  html: string
+) {
+  const el = ref.current;
+  if (!el) return;
+
+  el.focus();
+
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return;
+
+  const range = selection.getRangeAt(0);
+  range.deleteContents();
+
+  // 创建临时容器解析 HTML
+  const temp = document.createElement("div");
+  temp.innerHTML = html;
+  const fragment = document.createDocumentFragment();
+  while (temp.firstChild) {
+    fragment.appendChild(temp.firstChild);
+  }
+
+  range.insertNode(fragment);
+
+  // 移动光标到插入内容之后
+  range.collapse(false);
+  selection.removeAllRanges();
+  selection.addRange(range);
+
+  // 触发 input 事件
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+// 获取 contentEditable div 的纯文本内容
+export function getContentEditableText(ref: React.RefObject<HTMLDivElement | null>): string {
+  return ref.current?.textContent || "";
+}
+
+// 清空 contentEditable div
+export function clearContentEditable(ref: React.RefObject<HTMLDivElement | null>) {
+  if (ref.current) {
+    ref.current.innerHTML = "";
+  }
+}
+
 // 计算字符串的实际显示长度（emoji 算 1 个字符）
 export function getDisplayLength(text: string): number {
   if (typeof Intl !== "undefined" && Intl.Segmenter) {

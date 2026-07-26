@@ -207,7 +207,7 @@ const UNICODE_CATEGORIES = [
 const ALL_CATEGORIES = [DOUYIN_CATEGORY, ...UNICODE_CATEGORIES];
 
 interface EmojiPickerProps {
-  onSelect: (emoji: string) => void;
+  onSelect: (text: string, html?: string) => void;
 }
 
 export default function EmojiPicker({ onSelect }: EmojiPickerProps) {
@@ -244,8 +244,14 @@ export default function EmojiPicker({ onSelect }: EmojiPickerProps) {
     })).filter((cat) => cat.emojis.length > 0);
   }, [search]);
 
-  const handleSelect = useCallback((emoji: string) => {
-    onSelect(emoji);
+  const handleSelect = useCallback((emoji: string, isDouyin: boolean, url?: string) => {
+    if (isDouyin && url) {
+      // 抖音表情：text 存代码，html 存 img 标签
+      onSelect(emoji, `<img src="${url}" alt="${emoji}" class="inline-block h-5 w-5 align-middle mx-0.5" draggable="false" />`);
+    } else {
+      // Unicode emoji：直接插入字符
+      onSelect(emoji);
+    }
     setIsOpen(false);
     setSearch("");
   }, [onSelect]);
@@ -313,28 +319,31 @@ export default function EmojiPicker({ onSelect }: EmojiPickerProps) {
           {/* Emoji 网格 */}
           <div className="h-[240px] overflow-y-auto p-1.5 [scrollbar-width:thin] [scrollbar-color:rgb(161_161_170)_transparent] dark:[scrollbar-color:rgb(82_82_91)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-zinc-300 [&::-webkit-scrollbar-track]:bg-transparent dark:[&::-webkit-scrollbar-thumb]:bg-zinc-600">
             <div className="grid grid-cols-8 gap-0.5">
-              {currentEmojis.map((e, i) => (
-                <button
-                  key={`${activeCategory}-${i}`}
-                  type="button"
-                  onClick={() => handleSelect(e.emoji)}
-                  className="flex h-8 w-8 items-center justify-center rounded transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-700"
-                  title={e.label}
-                >
-                  {"url" in e && (e as any).url ? (
-                    <img
-                      src={(e as any).url}
-                      alt={e.label}
-                      className="h-6 w-6"
-                      draggable={false}
-                      loading={i < 64 ? "eager" : "lazy"}
-                      decoding="async"
-                    />
-                  ) : (
-                    <span className="text-lg">{e.emoji}</span>
-                  )}
-                </button>
-              ))}
+              {currentEmojis.map((e, i) => {
+                const isDouyin = "url" in e && !!(e as any).url;
+                return (
+                  <button
+                    key={`${activeCategory}-${i}`}
+                    type="button"
+                    onClick={() => handleSelect(e.emoji, isDouyin, isDouyin ? (e as any).url : undefined)}
+                    className="flex h-8 w-8 items-center justify-center rounded transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                    title={e.label}
+                  >
+                    {isDouyin ? (
+                      <img
+                        src={(e as any).url}
+                        alt={e.label}
+                        className="h-6 w-6"
+                        draggable={false}
+                        loading={i < 64 ? "eager" : "lazy"}
+                        decoding="async"
+                      />
+                    ) : (
+                      <span className="text-lg">{e.emoji}</span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
