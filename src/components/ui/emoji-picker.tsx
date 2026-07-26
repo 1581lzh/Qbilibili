@@ -3,6 +3,17 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { EMOJI_CATEGORIES } from "@/lib/emoji-data";
+import { DOUYIN_EMOJI_LIST } from "@/lib/douyin-emoji-data";
+
+// 构建抖音分类（emoji 字段存 code 用于 onSelect 回调，label 存显示名）
+const DOUYIN_CATEGORY = {
+  name: "抖音",
+  icon: "🤪",
+  emojis: DOUYIN_EMOJI_LIST.map((e) => ({ emoji: e.code, label: e.name, url: e.url })),
+  isDouyin: true as const,
+};
+
+const ALL_CATEGORIES = [...EMOJI_CATEGORIES, DOUYIN_CATEGORY];
 
 interface EmojiPickerProps {
   onSelect: (emoji: string) => void;
@@ -15,7 +26,6 @@ export default function EmojiPicker({ onSelect }: EmojiPickerProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
-  // 点击外部关闭
   useEffect(() => {
     if (!isOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
@@ -32,14 +42,13 @@ export default function EmojiPicker({ onSelect }: EmojiPickerProps) {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen]);
 
-  // 搜索过滤
   const filteredCategories = useMemo(() => {
-    if (!search.trim()) return EMOJI_CATEGORIES;
+    if (!search.trim()) return ALL_CATEGORIES;
     const q = search.toLowerCase();
-    return EMOJI_CATEGORIES.map((cat) => ({
+    return ALL_CATEGORIES.map((cat) => ({
       ...cat,
       emojis: cat.emojis.filter(
-        (e) => e.label.toLowerCase().includes(q) || e.emoji.includes(q)
+        (e) => e.label.toLowerCase().includes(q) || e.emoji.toLowerCase().includes(q)
       ),
     })).filter((cat) => cat.emojis.length > 0);
   }, [search]);
@@ -70,9 +79,8 @@ export default function EmojiPicker({ onSelect }: EmojiPickerProps) {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 4 }}
             transition={{ duration: 0.15 }}
-            className="absolute bottom-full left-0 z-50 mb-2 w-[320px] overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-700 dark:bg-zinc-800"
+            className="absolute bottom-full left-0 z-50 mb-2 w-[340px] overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-700 dark:bg-zinc-800"
           >
-            {/* 搜索栏 */}
             <div className="border-b border-zinc-100 p-2 dark:border-zinc-700">
               <input
                 type="text"
@@ -84,15 +92,14 @@ export default function EmojiPicker({ onSelect }: EmojiPickerProps) {
               />
             </div>
 
-            {/* 分类标签 */}
             {!search && (
-              <div className="flex border-b border-zinc-100 dark:border-zinc-700">
-                {EMOJI_CATEGORIES.map((cat, i) => (
+              <div className="flex flex-wrap border-b border-zinc-100 dark:border-zinc-700">
+                {ALL_CATEGORIES.map((cat, i) => (
                   <button
                     key={cat.name}
                     type="button"
                     onClick={() => setActiveCategory(i)}
-                    className={`flex-1 py-2 text-center text-lg transition-colors ${
+                    className={`px-2 py-2 text-center text-lg transition-colors ${
                       activeCategory === i
                         ? "border-b-2 border-[#FB7299] text-[#FB7299]"
                         : "text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300"
@@ -104,14 +111,13 @@ export default function EmojiPicker({ onSelect }: EmojiPickerProps) {
               </div>
             )}
 
-            {/* Emoji 网格 */}
-            <div className="h-[240px] overflow-y-auto p-2">
+            <div className="h-[280px] overflow-y-auto p-2">
               {filteredCategories.length === 0 ? (
                 <div className="flex h-full items-center justify-center text-sm text-zinc-400">
                   未找到匹配的 emoji
                 </div>
               ) : (
-                (search ? filteredCategories : [EMOJI_CATEGORIES[activeCategory]]).map(
+                (search ? filteredCategories : [ALL_CATEGORIES[activeCategory]]).map(
                   (cat) => (
                     <div key={cat.name}>
                       {!search && (
@@ -125,10 +131,22 @@ export default function EmojiPicker({ onSelect }: EmojiPickerProps) {
                             key={e.emoji}
                             type="button"
                             onClick={() => handleSelect(e.emoji)}
-                            className="flex h-9 w-9 items-center justify-center rounded-lg text-xl transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-700"
+                            className="flex h-9 w-9 items-center justify-center rounded-lg transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-700"
                             title={e.label}
                           >
-                            {e.emoji}
+                            {"url" in e && (e as any).url ? (
+                              <img
+                                src={(e as any).url}
+                                alt={e.label}
+                                className="h-7 w-7"
+                                draggable={false}
+                                onError={(ev) => {
+                                  (ev.target as HTMLImageElement).style.display = "none";
+                                }}
+                              />
+                            ) : (
+                              <span className="text-xl">{e.emoji}</span>
+                            )}
                           </button>
                         ))}
                       </div>

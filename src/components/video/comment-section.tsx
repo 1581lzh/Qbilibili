@@ -10,7 +10,7 @@ import { ImageLightbox } from "./image-lightbox";
 import { compressImage, formatFileSize } from "@/lib/image-compress";
 import EmojiPicker from "@/components/ui/emoji-picker";
 import { insertTextAtCursor } from "@/lib/emoji";
-import { replaceBilibiliEmoji } from "@/lib/emoji-data";
+import { renderEmojiText } from "@/lib/emoji-data";
 
 interface Author {
   id: string;
@@ -643,16 +643,18 @@ export default function CommentSection({ videoId }: { videoId: string }) {
             {reply.replyToName && (
               <span className="text-xs text-zinc-400">
                 回复 @{reply.replyToName}
-                {reply.replyToContent && reply.replyToContent.trim().length > 0
-                  ? ` ${replaceBilibiliEmoji(reply.replyToContent.slice(0, 4))}${reply.replyToContent.length > 4 ? "..." : ""}`
-                  : reply.replyToImages && reply.replyToImages > 0
-                    ? ` 图片x${reply.replyToImages}`
-                    : ""
+                {reply.replyToContent && reply.replyToContent.trim().length > 4
+                  ? <span dangerouslySetInnerHTML={{ __html: ` ${renderEmojiText(reply.replyToContent.slice(0, 4))}...` }} />
+                  : reply.replyToContent && reply.replyToContent.trim().length > 0
+                    ? <span dangerouslySetInnerHTML={{ __html: ` ${renderEmojiText(reply.replyToContent)}` }} />
+                    : reply.replyToImages && reply.replyToImages > 0
+                      ? ` 图片x${reply.replyToImages}`
+                      : ""
                 }：
               </span>
             )}
             <span className="text-sm text-zinc-700 dark:text-zinc-300">
-              {replaceBilibiliEmoji(reply.content)}
+              <span dangerouslySetInnerHTML={{ __html: renderEmojiText(reply.content) }} />
             </span>
           </div>
           {reply.images && reply.images.length > 0 && (
@@ -937,7 +939,7 @@ export default function CommentSection({ videoId }: { videoId: string }) {
                   )}
                 </div>
                 <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">
-                  {replaceBilibiliEmoji(comment.content)}
+                  <span dangerouslySetInnerHTML={{ __html: renderEmojiText(comment.content) }} />
                 </p>
                 {comment.images && comment.images.length > 0 && (
                   <CommentImages

@@ -514,6 +514,8 @@ export const EMOJI_CATEGORIES: EmojiCategory[] = [
 ];
 
 // B站格式 emoji 映射表
+import { DOUYIN_EMOJI_MAP } from "@/lib/douyin-emoji-data";
+
 export const BILIBILI_EMOJI_MAP: Record<string, string> = {
   "[微笑]": "😄",
   "[开心]": "😃",
@@ -607,5 +609,26 @@ export const BILIBILI_EMOJI_MAP: Record<string, string> = {
 export function replaceBilibiliEmoji(text: string): string {
   return text.replace(/\[([^\]]+)\]/g, (match, code) => {
     return BILIBILI_EMOJI_MAP[match] || match;
+  });
+}
+
+// 渲染 emoji 文本：抖音表情用图片，B站格式转 Unicode
+// 返回 HTML 字符串，用于 dangerouslySetInnerHTML
+export function renderEmojiText(text: string): string {
+  // 先导入抖音表情映射
+  const { DOUYIN_EMOJI_MAP } = require("./douyin-emoji-data");
+
+  return text.replace(/\[([^\]]+)\]/g, (match) => {
+    // 优先匹配抖音表情（返回 img 标签）
+    if (DOUYIN_EMOJI_MAP[match]) {
+      const url = DOUYIN_EMOJI_MAP[match];
+      return `<img src="${url}" alt="${match}" class="inline-block h-5 w-5 align-middle mx-0.5" draggable="false" />`;
+    }
+    // 其次匹配 B站格式 emoji（返回 Unicode）
+    if (BILIBILI_EMOJI_MAP[match]) {
+      return BILIBILI_EMOJI_MAP[match];
+    }
+    // 都不匹配则原样返回
+    return match;
   });
 }
