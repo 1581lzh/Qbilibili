@@ -100,6 +100,29 @@ function ensureStyles() {
     .prism-big-play-btn { display: none !important; }
     .prism-player .prism-cover { display: none !important; }
     .prism-player .prism-animation { display: none !important; }
+    .prism-player .bili-blur-bg {
+      position: absolute !important;
+      top: 0 !important; left: 0 !important;
+      width: 100% !important; height: 100% !important;
+      object-fit: cover !important;
+      transform: scale(1.15);
+      filter: blur(72px) brightness(0.9) saturate(1.15);
+      opacity: 1;
+      z-index: 0 !important;
+      pointer-events: none !important;
+      animation: bili-bg-fade 0.4s ease-out forwards;
+    }
+    @keyframes bili-bg-fade {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    /* 背景必须垫底：视频（Aliplayer 为 absolute）DOM 在背景之后天然覆盖其上，
+       控件层强制提升到背景之上，确保点击控件不触发背景层的任何事件。 */
+    .prism-player .prism-controlbar,
+    .prism-player .playlist-component,
+    .prism-player .prism-big-play-btn {
+      z-index: 2 !important;
+    }
     .prism-player .prism-text-overlay { pointer-events: none !important; }
     @keyframes bili-elastic {
       0% { transform: translate(-50%,-50%) scale(0); opacity: 0; }
@@ -270,6 +293,8 @@ export default function VideoPlayer({
     let clickHandler: ((e: Event) => void) | null = null;
     let touchHandler: ((e: Event) => void) | null = null;
     let cleanupContainer: HTMLElement | null = null;
+    let blurInterval: ReturnType<typeof setInterval> | null = null;
+    let blurResizeHandler: (() => void) | null = null;
 
     const initPlayer = async () => {
       try {
@@ -427,6 +452,77 @@ export default function VideoPlayer({
 
         setTimeout(bindClickHandlers, 500);
 
+        // 高斯模糊背景填充黑边：使用视频封面图（不会随内容变化）。
+        // 判断逻辑：比较「视频实际比例」与「容器实际比例」，差异超过阈值（存在黑边）才显示。
+        // 该方式自动适配移动端竖屏全屏、PC 端横屏等任意容器比例，不依赖固定值。
+        const coverUrl = optimizedCover(initialVideo.coverUrl, 1280);
+        const setupBlurBackground = () => {
+          const containerEl = document.getElementById(cid);
+          if (!containerEl || !coverUrl) return;
+
+          // 封面图比例（视频元数据未就绪前的兜底）
+          let coverAspect: number | null = null;
+          const coverProbe = new window.Image();
+          coverProbe.onload = () => {
+            if (coverProbe.naturalWidth > 0 && coverProbe.naturalHeight > 0) {
+              coverAspect = coverProbe.naturalWidth / coverProbe.naturalHeight;
+              check();
+            }
+          };
+          coverProbe.src = coverUrl;
+
+          // 优先用视频真实比例，未就绪时回退到封面比例
+          const getMediaAspect = () => {
+            const videoEl = containerEl.querySelector("video") as HTMLVideoElement | null;
+            if (videoEl && videoEl.videoWidth > 0 && videoEl.videoHeight > 0) {
+              return videoEl.videoWidth / videoEl.videoHeight;
+            }
+            return coverAspect;
+          };
+
+          const check = () => {
+            const cw = containerEl.clientWidth;
+            const ch = containerEl.clientHeight;
+            if (cw <= 0 || ch <= 0) return;
+            const containerAspect = cw / ch;
+            const mediaAspect = getMediaAspect();
+            if (!mediaAspect || mediaAspect <= 0) return;
+            const diff = Math.abs(mediaAspect - containerAspect) / Math.max(mediaAspect, containerAspect);
+            const needsBg = diff > 0.05;
+
+            let bg = containerEl.querySelector(".bili-blur-bg") as HTMLImageElement | null;
+            if (needsBg) {
+              if (!bg) {
+                // 插入到播放器根内部（.prism-player 或容器自身）的第一个子元素位置，
+                // 并内联强制 pointer-events:none 确保绝不拦截控件点击。
+                const playerRoot = containerEl.querySelector(".prism-player") || containerEl;
+                bg = document.createElement("img");
+                bg.className = "bili-blur-bg";
+                bg.alt = "";
+                bg.loading = "lazy";
+                bg.decoding = "async";
+                bg.src = coverUrl;
+                bg.style.pointerEvents = "none";
+                bg.style.position = "absolute";
+                bg.style.zIndex = "0";
+                bg.style.inset = "0";
+                bg.style.width = "100%";
+                bg.style.height = "100%";
+                bg.style.objectFit = "cover";
+                bg.style.transform = "scale(1.15)";
+                playerRoot.insertBefore(bg, playerRoot.firstChild);
+              }
+            } else if (bg) {
+              bg.remove();
+            }
+          };
+          check();
+          blurInterval = setInterval(check, 500);
+          blurResizeHandler = () => check();
+          window.addEventListener("resize", blurResizeHandler);
+        };
+        setTimeout(setupBlurBackground, 800);
+
         aliPlayerRef.current = player;
       } catch (err) { console.error("Aliplayer init failed:", err); }
     };
@@ -434,6 +530,8 @@ export default function VideoPlayer({
     initPlayer();
     return () => {
       destroyed = true;
+      if (blurInterval) clearInterval(blurInterval);
+      if (blurResizeHandler) window.removeEventListener("resize", blurResizeHandler);
       if (cleanupContainer && clickHandler) cleanupContainer.removeEventListener("click", clickHandler);
       if (cleanupContainer && touchHandler) cleanupContainer.removeEventListener("touchend", touchHandler as EventListener);
       if (aliPlayerRef.current) { try { aliPlayerRef.current.dispose(); } catch {} aliPlayerRef.current = null; }

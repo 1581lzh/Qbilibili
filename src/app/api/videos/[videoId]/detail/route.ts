@@ -48,6 +48,7 @@ export async function GET(
     normalizedUrl: video.normalizedUrl,
     postType: video.postType,
     imageUrls: video.imageUrls,
+    livePhotoVideos: video.livePhotoVideos,
     musicUrl: video.musicUrl,
     musicUrls: video.musicUrls,
     imageDuration: video.imageDuration,

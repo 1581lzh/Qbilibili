@@ -8,7 +8,7 @@ import VideoPlayer from "@/components/video/video-player";
 import VideoLikeButton from "@/components/video/video-like-button";
 import VideoFavoriteButton from "@/components/video/video-favorite-button";
 import VideoDeleteButton from "@/components/video/video-delete-button";
-import { Pencil, Repeat, Play, SkipForward } from "lucide-react";
+import { Pencil, Repeat, Play, SkipForward, Volume2, Volume1, VolumeX } from "lucide-react";
 import { type PlayMode, MODES, fetchPlayMode, updatePlayMode } from "@/lib/play-mode";
 
 interface VideoInfo {
@@ -22,6 +22,7 @@ interface VideoInfo {
   normalizedUrl?: string | null;
   postType?: string;
   imageUrls?: string | null;
+  livePhotoVideos?: string | null;
   musicUrl?: string | null;
   musicUrls?: string | null;
   imageDuration?: number | null;
@@ -75,7 +76,7 @@ const CAROUSEL_VARIANTS = {
   exit: (dir: number) => ({ opacity: 0, x: dir * -100 }),
 };
 
-function ImageCarousel({ imageUrls, musicUrls, imageDuration, playMode, onNext }: { imageUrls: string[]; musicUrls?: string[] | null; imageDuration?: number | null; playMode: PlayMode; onNext?: () => void }) {
+function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, playMode, userId, onNext }: { imageUrls: string[]; livePhotoVideos?: string[] | null; musicUrls?: string[] | null; imageDuration?: number | null; playMode: PlayMode; userId?: string | null; onNext?: () => void }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true); // Start playing by default
   const [totalAudioDuration, setTotalAudioDuration] = useState(0);
@@ -84,6 +85,12 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration, playMode, onNext }
   const [showIndicator, setShowIndicator] = useState<"play" | "pause" | null>(null);
   const [progress, setProgress] = useState(0); // 0-100 progress for current image
   const [mode, setMode] = useState<PlayMode>(playMode);
+  const userIdRef = useRef(userId);
+  useEffect(() => { userIdRef.current = userId; }, [userId]);
+  useEffect(() => { fetchPlayMode(userId).then(setMode); }, [userId]);
+  const [volume, setVolume] = useState(1);
+  const [muted, setMuted] = useState(false);
+  const [showVolume, setShowVolume] = useState(false);
   const [showModeTooltip, setShowModeTooltip] = useState(false);
   const [showControls, setShowControls] = useState(() => {
     // Mobile: show controls for 3 seconds on mount
@@ -96,6 +103,8 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration, playMode, onNext }
   const [, forceRender] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
   const audioUrlsRef = useRef<string[]>([]);
+  const livePhotoVideoRef = useRef<HTMLVideoElement>(null);
+  const [needBlurBg, setNeedBlurBg] = useState(false);
   const autoPlayTimerRef = useRef<NodeJS.Timeout | null>(null);
   const indicatorTimerRef = useRef<NodeJS.Timeout | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -106,6 +115,32 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration, playMode, onNext }
   const modeRef = useRef<PlayMode>(playMode);
 
   useEffect(() => { modeRef.current = mode; }, [mode]);
+  const stoppedBySingleModeRef = useRef(false);
+
+  // 判断当前图片是否需要模糊背景填充黑边：
+  // 比较「当前图片实际比例」与「容器实际比例」，差异超过阈值（存在黑边）才显示。
+  // 用 ResizeObserver 监听容器尺寸变化 + 图片 onLoad 获取真实比例，自动适配移动端/PC 端。
+  const curImageRatioRef = useRef<number | null>(null);
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const check = () => {
+      const cw = container.clientWidth;
+      const ch = container.clientHeight;
+      const ratio = curImageRatioRef.current;
+      if (cw <= 0 || ch <= 0 || !ratio || ratio <= 0) return;
+      const containerAspect = cw / ch;
+      const diff = Math.abs(ratio - containerAspect) / Math.max(ratio, containerAspect);
+      setNeedBlurBg(diff > 0.05);
+    };
+
+    // 先按当前已知比例评估一次
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(container);
+    return () => ro.disconnect();
+  }, [currentIndex]);
 
   // Parse musicUrls
   const audioUrls = useMemo(() => {
@@ -115,15 +150,42 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration, playMode, onNext }
   audioUrlsRef.current = audioUrls;
 
   const images = imageUrls.filter(url => url);
+  // livePhotoVideos is paired 1:1 with imageUrls (same index). Filter to match images indices.
+  const liveVideos = useMemo(() => {
+    if (!livePhotoVideos || !Array.isArray(livePhotoVideos)) return [];
+    return images.map((_, i) => livePhotoVideos[i] || "");
+  }, [livePhotoVideos, images]);
+  const liveVideosRef = useRef(liveVideos);
+  liveVideosRef.current = liveVideos;
+  const currentLiveVideo = liveVideos[currentIndex] || "";
+  // Track each live photo video's duration (seconds) to balance auto-mode preview times
+  const liveDurationsRef = useRef<number[]>([]);
+  const [, setLiveDurationsTick] = useState(0);
 
-  // Calculate interval: user-set duration, or total audio duration / image count
+  // Calculate interval:
+  // - Live photo images: the video's full duration (video-first, complete playback)
+  // - Auto mode (no manual duration): balance so static images share the remaining audio time
+  //   (totalAudioDuration - Σ live video durations) / static image count
   const getInterval = useCallback(() => {
+    const liveVideo = liveVideosRef.current[currentIndex] || "";
+    if (liveVideo) {
+      const v = livePhotoVideoRef.current;
+      if (v && v.duration && isFinite(v.duration)) return v.duration * 1000;
+      return 3000; // fallback while video metadata loads
+    }
     if (imageDuration && imageDuration > 0) return imageDuration * 1000;
     if (totalAudioDuration > 0 && images.length > 1) {
+      const liveTotal = liveDurationsRef.current.reduce((s, d) => s + (d || 0), 0);
+      const staticCount = images.length - liveVideosRef.current.filter((v) => v).length;
+      if (staticCount > 0) {
+        const remain = totalAudioDuration - liveTotal;
+        const each = Math.max(2, Math.ceil(remain / staticCount));
+        return each * 1000;
+      }
       return Math.ceil(totalAudioDuration / images.length) * 1000;
     }
     return 5000; // default 5s
-  }, [imageDuration, totalAudioDuration, images.length]);
+  }, [imageDuration, totalAudioDuration, images.length, currentIndex]);
 
   const goToImage = useCallback((newIndex: number) => {
     setCurrentIndex(prev => {
@@ -159,9 +221,78 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration, playMode, onNext }
     return () => clearTimeout(timer);
   }, [showControls]);
 
-  // Auto-play timer with smooth progress animation
+  // Advance to the next image according to play mode (shared by live photo & static images)
+  const advanceImage = useCallback(() => {
+    elapsedRef.current = 0;
+    const currentMode = modeRef.current;
+    setCurrentIndex(prev => {
+      const isLast = prev >= images.length - 1;
+      if (isLast) {
+        if (currentMode === "single") {
+          // Stop on last image
+          stoppedBySingleModeRef.current = true;
+          setIsPlaying(false);
+          setProgress(100);
+          return prev;
+        }
+        if (currentMode === "next") {
+          // Navigate to next video
+          setIsPlaying(false);
+          setProgress(100);
+          onNext?.();
+          return prev;
+        }
+        // loop: back to first
+        dirRef.current = 1;
+        forceRender(n => n + 1);
+        return 0;
+      }
+      dirRef.current = 1;
+      forceRender(n => n + 1);
+      return prev + 1;
+    });
+  }, [images.length, onNext]);
+
+  // Live photo video playback control:
+  // - When current image is a live photo and isPlaying, play the muted video, drive progress from timeupdate
+  // - On video 'ended', advance to next image (respecting play mode)
   useEffect(() => {
-    if (images.length <= 1 || !isPlaying || userInteracted) {
+    const v = livePhotoVideoRef.current;
+    if (!currentLiveVideo) {
+      if (v) { v.pause(); v.currentTime = 0; }
+      return;
+    }
+    if (v && isPlaying && !userInteracted) {
+      v.muted = true;
+      const onLoaded = () => {
+        if (v.duration && isFinite(v.duration)) {
+          liveDurationsRef.current[currentIndex] = v.duration;
+          setLiveDurationsTick((n) => n + 1);
+        }
+      };
+      const onTime = () => {
+        if (v.duration && isFinite(v.duration)) {
+          setProgress(Math.min(100, (v.currentTime / v.duration) * 100));
+        }
+      };
+      const onEnded = () => { advanceImage(); };
+      v.addEventListener("loadedmetadata", onLoaded);
+      v.addEventListener("timeupdate", onTime);
+      v.addEventListener("ended", onEnded);
+      v.play().catch(() => {});
+      return () => {
+        v.removeEventListener("loadedmetadata", onLoaded);
+        v.removeEventListener("timeupdate", onTime);
+        v.removeEventListener("ended", onEnded);
+      };
+    } else if (v) {
+      v.pause();
+    }
+  }, [currentLiveVideo, isPlaying, userInteracted, advanceImage, currentIndex]);
+
+  // Auto-play timer with smooth progress animation (static images only; live photo uses video timeupdate)
+  useEffect(() => {
+    if (images.length <= 1 || !isPlaying || userInteracted || currentLiveVideo) {
       if (autoPlayTimerRef.current) {
         clearInterval(autoPlayTimerRef.current);
         autoPlayTimerRef.current = null;
@@ -193,35 +324,7 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration, playMode, onNext }
 
     // Calculate remaining time for the cycling timer
     const remaining = Math.max(0, interval - elapsedRef.current);
-    autoPlayTimerRef.current = setTimeout(() => {
-      elapsedRef.current = 0;
-      const currentMode = modeRef.current;
-      setCurrentIndex(prev => {
-        const isLast = prev >= images.length - 1;
-        if (isLast) {
-          if (currentMode === "single") {
-            // Stop on last image
-            setIsPlaying(false);
-            setProgress(100);
-            return prev;
-          }
-          if (currentMode === "next") {
-            // Navigate to next video
-            setIsPlaying(false);
-            setProgress(100);
-            onNext?.();
-            return prev;
-          }
-          // loop: back to first
-          dirRef.current = 1;
-          forceRender(n => n + 1);
-          return 0;
-        }
-        dirRef.current = 1;
-        forceRender(n => n + 1);
-        return prev + 1;
-      });
-    }, remaining);
+    autoPlayTimerRef.current = setTimeout(advanceImage, remaining);
 
     return () => {
       if (autoPlayTimerRef.current) {
@@ -230,7 +333,7 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration, playMode, onNext }
       }
       if (progressRafRef.current) cancelAnimationFrame(progressRafRef.current);
     };
-  }, [images.length, isPlaying, userInteracted, currentIndex, getInterval]);
+  }, [images.length, isPlaying, userInteracted, currentIndex, getInterval, currentLiveVideo, advanceImage]);
 
   // Reset userInteracted when user pauses and resumes
   useEffect(() => {
@@ -251,7 +354,26 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration, playMode, onNext }
   }, []);
 
   const togglePlay = useCallback(() => {
-    if (audioRef.current) {
+    // If paused because single mode reached the end, resume from the start of the carousel
+    if (!isPlaying && stoppedBySingleModeRef.current) {
+      stoppedBySingleModeRef.current = false;
+      elapsedRef.current = 0;
+      setProgress(0);
+      setCurrentIndex(0);
+    }
+    if (currentLiveVideo) {
+      // Live photo: toggle the muted video; the background music continues (or pauses with the whole carousel)
+      if (isPlaying) {
+        livePhotoVideoRef.current?.pause();
+        if (audioRef.current) audioRef.current.pause();
+        showTempIndicator("play");
+      } else {
+        livePhotoVideoRef.current?.play().catch(() => {});
+        if (audioRef.current) audioRef.current.play().catch(() => {});
+        showTempIndicator("pause");
+      }
+      setIsPlaying(!isPlaying);
+    } else if (audioRef.current) {
       if (isPlaying) {
         audioRef.current.pause();
         showTempIndicator("play");  // Show play icon = "click to resume"
@@ -270,14 +392,61 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration, playMode, onNext }
       setIsPlaying(newPlaying);
       showTempIndicator(newPlaying ? "pause" : "play");
     }
-  }, [isPlaying, audioUrls.length, showTempIndicator]);
+  }, [isPlaying, audioUrls.length, showTempIndicator, currentLiveVideo]);
 
   const cycleMode = useCallback(() => {
     setMode(prev => {
       const i = MODES.findIndex(m => m.key === prev);
       const next = MODES[(i + 1) % MODES.length].key;
+      updatePlayMode(next, userIdRef.current);
       return next;
     });
+  }, []);
+
+  // Apply volume to background music audio element
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = muted ? 0 : volume;
+    }
+  }, [volume, muted]);
+
+  const toggleMute = useCallback(() => {
+    setMuted(prev => !prev);
+  }, []);
+
+  const handleVolumeChange = useCallback((v: number) => {
+    setVolume(v);
+    if (v > 0 && muted) setMuted(false);
+  }, [muted]);
+
+  // 音量滑块样式：thumb 圆点相对轨道中线对齐（Tailwind 任意变体对 range 伪元素不可靠，用注入 CSS）
+  useEffect(() => {
+    const styleId = "bili-vol-slider-style";
+    if (document.getElementById(styleId)) return;
+    const s = document.createElement("style");
+    s.id = styleId;
+    s.textContent = `
+      .bili-vol-slider { -webkit-appearance: none; appearance: none; }
+      .bili-vol-slider::-webkit-slider-runnable-track {
+        height: 4px; border-radius: 9999px; background: transparent;
+      }
+      .bili-vol-slider::-webkit-slider-thumb {
+        -webkit-appearance: none; appearance: none;
+        width: 12px; height: 12px; border-radius: 9999px;
+        background: #FB7299; border: 0;
+        margin-top: -4px; /* (thumb 12 - track 4) / 2 → 使圆心对齐轨道中线 */
+        box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+      }
+      .bili-vol-slider::-moz-range-track {
+        height: 4px; border-radius: 9999px; background: transparent;
+      }
+      .bili-vol-slider::-moz-range-thumb {
+        width: 12px; height: 12px; border-radius: 9999px;
+        background: #FB7299; border: 0;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+      }
+    `;
+    document.head.appendChild(s);
   }, []);
 
   // Keep refs in sync so native event listeners always call latest callbacks
@@ -330,6 +499,13 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration, playMode, onNext }
         // Autoplay blocked - set to paused state
         setIsPlaying(false);
       });
+    }
+  }, [isPlaying]);
+
+  // Pause audio when isPlaying becomes false (e.g. single mode stops on last image)
+  useEffect(() => {
+    if (!isPlaying && audioRef.current && !audioRef.current.paused) {
+      audioRef.current.pause();
     }
   }, [isPlaying]);
 
@@ -434,6 +610,11 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration, playMode, onNext }
     const onClick = (e: Event) => {
       // 忽略按钮/链接的点击（React stopPropagation 无法阻止原生事件冒泡到此）
       const t = (e as MouseEvent).target as HTMLElement;
+      // 点击控制栏（含空白处）不触发播放/暂停，只切换控制栏可见性
+      if (t.closest("[data-controlbar]")) {
+        setShowControls(prev => !prev);
+        return;
+      }
       if (t.closest("button") || t.closest("a")) return;
       // Mobile: single tap toggles controls visibility
       if (isTouchDevice()) {
@@ -480,6 +661,42 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration, playMode, onNext }
         />
       )}
 
+      {currentLiveVideo && (
+        <video
+          ref={livePhotoVideoRef}
+          src={currentLiveVideo}
+          muted
+          playsInline
+          loop={false}
+          preload="auto"
+          className="relative z-10 h-full w-full object-contain"
+        />
+      )}
+
+      {/* 高斯模糊背景填充黑边：随当前图片动态变化，仅在存在黑边时显示。
+          使用独立 AnimatePresence 让背景与前景一起交叉淡化切换，避免原地突变。 */}
+      <AnimatePresence initial={false}>
+        {needBlurBg && (
+          <motion.div
+            key={`bg-${currentIndex}`}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.3 }}
+            className="pointer-events-none absolute inset-0 z-0 bg-black"
+            aria-hidden
+          >
+            <img
+              src={images[currentIndex]}
+              alt=""
+              className="h-full w-full scale-110 object-cover opacity-100 blur-[60px] brightness-[0.9] saturate-[1.15]"
+              loading="lazy"
+              decoding="async"
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <AnimatePresence mode="wait" custom={dirRef.current}>
         <motion.img
           key={`img-${currentIndex}`}
@@ -491,7 +708,23 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration, playMode, onNext }
           animate="center"
           exit="exit"
           transition={{ duration: 0.2 }}
-          className="h-full w-full object-contain"
+          onLoad={(e) => {
+            const img = e.currentTarget;
+            if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+              curImageRatioRef.current = img.naturalWidth / img.naturalHeight;
+              // 触发容器内比例检查
+              const container = containerRef.current;
+              if (container) {
+                const cw = container.clientWidth;
+                const ch = container.clientHeight;
+                const ratio = curImageRatioRef.current;
+                const containerAspect = cw / ch;
+                const diff = Math.abs(ratio - containerAspect) / Math.max(ratio, containerAspect);
+                setNeedBlurBg(diff > 0.05);
+              }
+            }
+          }}
+          className={`relative z-10 h-full w-full object-contain ${currentLiveVideo ? "opacity-0" : ""}`}
           draggable={false}
         />
       </AnimatePresence>
@@ -505,7 +738,7 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration, playMode, onNext }
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.8, opacity: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 20 }}
-            className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2"
+            className="pointer-events-none absolute left-1/2 top-1/2 z-40 -translate-x-1/2 -translate-y-1/2"
           >
             <div className="flex h-[min(18vw,18vh)] w-[min(18vw,18vh)] items-center justify-center rounded-full bg-black/60">
               {showIndicator === "pause" ? (
@@ -524,25 +757,33 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration, playMode, onNext }
       </AnimatePresence>
 
       {/* Bottom control bar - like video player */}
-      <div className={`absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/70 to-transparent transition-opacity duration-300 opacity-0 group-hover:opacity-100 ${showControls ? '!opacity-100' : ''}`}>
-        {/* Progress bar */}
+      <div data-controlbar className={`absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/70 to-transparent transition-opacity duration-300 opacity-0 group-hover:opacity-100 ${showControls ? '!opacity-100' : ''}`}>
+        {/* Progress bar - click a segment to jump to that image */}
         {images.length > 1 && (
-          <div className="flex gap-[2px] px-2 pt-2">
+          <div className="flex h-[9px] items-center gap-[2px] px-2 pt-2">
             {images.map((_, i) => (
-              <div
+              <button
                 key={i}
-                className="relative h-[3px] flex-1 overflow-hidden rounded-sm bg-white/30"
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (i !== currentIndex) {
+                    handleManualSwitch(i);
+                  }
+                }}
+                className="relative h-[3px] flex-1 overflow-hidden rounded-sm bg-white/30 transition-all duration-[80ms] hover:h-[9px] hover:opacity-100"
+                title={`跳转到第 ${i + 1} 张`}
               >
                 {i < currentIndex && (
-                  <div className="absolute inset-0 bg-white" />
+                  <span className="absolute inset-0 bg-white" />
                 )}
                 {i === currentIndex && (
-                  <div
+                  <span
                     className="absolute inset-y-0 left-0 bg-white"
                     style={{ width: `${progress}%` }}
                   />
                 )}
-              </div>
+              </button>
             ))}
           </div>
         )}
@@ -591,25 +832,65 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration, playMode, onNext }
                 </div>
               )}
             </button>
+            {/* Volume control */}
+            <div className="group/vol relative flex items-center">
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); toggleMute(); }}
+                onMouseEnter={() => setShowVolume(true)}
+                className="text-white hover:text-[#FB7299]"
+                title={muted ? "取消静音" : "静音"}
+              >
+                {muted || volume === 0 ? (
+                  <VolumeX className="h-5 w-5" />
+                ) : volume < 0.5 ? (
+                  <Volume1 className="h-5 w-5" />
+                ) : (
+                  <Volume2 className="h-5 w-5" />
+                )}
+              </button>
+              {/* Volume slider on hover — 滑块属于 hover 区域，鼠标移入不消失，移出才隐藏 */}
+              <div
+                onMouseEnter={() => setShowVolume(true)}
+                onMouseLeave={() => setShowVolume(false)}
+                className={`absolute bottom-full right-0 mb-2 flex-col items-center gap-1 rounded-md bg-black/80 px-2 py-2 transition-opacity duration-200 ${
+                  showVolume ? "flex opacity-100" : "pointer-events-none flex opacity-0"
+                }`}
+              >
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={muted ? 0 : volume}
+                  onChange={(e) => { e.stopPropagation(); handleVolumeChange(parseFloat(e.target.value)); }}
+                  className="bili-vol-slider h-1 w-20 cursor-pointer rounded-full"
+                  style={{
+                    background: `linear-gradient(to right, #FB7299 ${muted ? 0 : volume * 100}%, rgba(255,255,255,0.3) ${muted ? 0 : volume * 100}%)`,
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+            </div>
             <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              const el = containerRef.current;
-              if (el) {
-                if (document.fullscreenElement) {
-                  document.exitFullscreen();
-                } else {
-                  el.requestFullscreen();
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                const el = containerRef.current;
+                if (el) {
+                  if (document.fullscreenElement) {
+                    document.exitFullscreen();
+                  } else {
+                    el.requestFullscreen();
+                  }
                 }
-              }
-            }}
-            className="text-white hover:text-[#FB7299]"
-          >
-            <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-            </svg>
-          </button>
+              }}
+              className="text-white hover:text-[#FB7299]"
+            >
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+              </svg>
+            </button>
           </div>
         </div>
       </div>
@@ -621,7 +902,7 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration, playMode, onNext }
             type="button"
             onClick={(e) => { e.stopPropagation(); handleManualSwitch(Math.max(0, currentIndex - 1)); }}
             disabled={currentIndex === 0}
-            className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-2 text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100 disabled:opacity-30 hidden sm:block"
+            className="absolute left-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/50 p-2 text-white opacity-0 transition-all duration-200 group-hover:opacity-100 hover:bg-black/90 disabled:opacity-30 disabled:hover:bg-black/50 hidden sm:block"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -631,7 +912,7 @@ function ImageCarousel({ imageUrls, musicUrls, imageDuration, playMode, onNext }
             type="button"
             onClick={(e) => { e.stopPropagation(); handleManualSwitch(Math.min(images.length - 1, currentIndex + 1)); }}
             disabled={currentIndex === images.length - 1}
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-2 text-white opacity-0 transition-opacity duration-300 group-hover:opacity-100 disabled:opacity-30 hidden sm:block"
+            className="absolute right-2 top-1/2 z-30 -translate-y-1/2 rounded-full bg-black/50 p-2 text-white opacity-0 transition-all duration-200 group-hover:opacity-100 hover:bg-black/90 disabled:opacity-30 disabled:hover:bg-black/50 hidden sm:block"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -734,9 +1015,11 @@ export default function VideoPlaySection({
           {state.video.postType === "image_text" && state.video.imageUrls ? (
             <ImageCarousel
               imageUrls={JSON.parse(state.video.imageUrls)}
+              livePhotoVideos={state.video.livePhotoVideos ? JSON.parse(state.video.livePhotoVideos) : null}
               musicUrls={state.video.musicUrls ? JSON.parse(state.video.musicUrls) : (state.video.musicUrl ? [state.video.musicUrl] : null)}
               imageDuration={state.video.imageDuration}
               playMode={playMode}
+              userId={userId}
               onNext={handleNextVideo}
             />
           ) : (

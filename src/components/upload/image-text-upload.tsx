@@ -8,13 +8,19 @@ import { MusicPlayer } from "@/components/upload/music-player";
 import EmojiPicker from "@/components/ui/emoji-picker";
 import { insertTextAtCursor } from "@/lib/emoji";
 
+export interface ImageItem {
+  file: File;
+  preview: string;
+  livePhotoVideo: File | null;
+}
+
 interface ImageTextUploadPageProps {
   title: string;
   setTitle: (v: string) => void;
   description: string;
   setDescription: (v: string) => void;
-  images: { file: File; preview: string }[];
-  setImages: React.Dispatch<React.SetStateAction<{ file: File; preview: string }[]>>;
+  images: ImageItem[];
+  setImages: React.Dispatch<React.SetStateAction<ImageItem[]>>;
   music: { file: File; preview: string }[];
   setMusic: React.Dispatch<React.SetStateAction<{ file: File; preview: string }[]>>;
   imageDuration: number | null;
@@ -45,7 +51,7 @@ export function ImageTextUploadPage({
   const [editMode, setEditMode] = useState(false);
   const [imageOrders, setImageOrders] = useState<number[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
-  const [imagesSnapshot, setImagesSnapshot] = useState<{ file: File; preview: string }[] | null>(null);
+  const [imagesSnapshot, setImagesSnapshot] = useState<ImageItem[] | null>(null);
   const [coverIndex, setCoverIndex] = useState<number | null>(null);
   const [playMode, setPlayMode] = useState<"sequential" | "simultaneous" | "shuffle">("sequential");
   const [compressDialogOpen, setCompressDialogOpen] = useState(false);
@@ -67,7 +73,7 @@ export function ImageTextUploadPage({
     };
   }, []);
 
-  // Image selection
+  // Image selection — supports live photos (Motion Photo / .livp / HEIC+MOV pairing)
   const handleImagesSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
@@ -80,6 +86,21 @@ export function ImageTextUploadPage({
 
     const filesToProcess = Array.from(files).slice(0, remaining);
 
+    // Detect live photos (livp / HEIC / image+video pairs). If found, process asynchronously
+    // (this bypasses the plain-image compression path since it handles HEIC → JPEG itself).
+    try {
+      const { needsLivePhotoProcessing, processImageFiles } = await import("@/lib/live-photo");
+      if (needsLivePhotoProcessing(filesToProcess)) {
+        const processed = await processImageFiles(filesToProcess);
+        if (processed.length > 0) {
+          setImages((prev) => [...prev, ...processed]);
+          return;
+        }
+      }
+    } catch {
+      // Fall through to legacy handling if processing fails
+    }
+
     for (const file of filesToProcess) {
       if (needsCompression(file)) {
         setCompressTarget(file);
@@ -90,9 +111,9 @@ export function ImageTextUploadPage({
     }
   };
 
-  const addImage = (file: File) => {
+  const addImage = (file: File, livePhotoVideo: File | null = null) => {
     const preview = URL.createObjectURL(file);
-    setImages((prev) => [...prev, { file, preview }]);
+    setImages((prev) => [...prev, { file, preview, livePhotoVideo }]);
   };
 
   const handleCompressConfirm = async () => {
@@ -276,7 +297,8 @@ export function ImageTextUploadPage({
     // Create new ObjectURLs for snapshot to avoid sharing with current images
     setImagesSnapshot(images.map(img => ({
       file: img.file,
-      preview: URL.createObjectURL(img.file)
+      preview: URL.createObjectURL(img.file),
+      livePhotoVideo: img.livePhotoVideo
     })));
   };
 
@@ -440,7 +462,7 @@ export function ImageTextUploadPage({
           <input
             ref={imagesInputRef}
             type="file"
-            accept="image/*"
+            accept="image/*,video/mp4,video/quicktime,.livp"
             multiple
             onChange={handleImagesSelect}
             className="hidden"
@@ -454,7 +476,7 @@ export function ImageTextUploadPage({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
             点击或拖拽上传图片
-            <p className="mt-1 text-xs text-zinc-400">支持 JPG、PNG、GIF、WebP，单张最大 15MB</p>
+            <p className="mt-1 text-xs text-zinc-400">支持 JPG、PNG、GIF、WebP、HEIC、实况照片（.livp / Motion Photo），单张最大 15MB</p>
           </button>
         </div>
 
@@ -496,6 +518,13 @@ export function ImageTextUploadPage({
                   {editMode && getImageOrder(index) !== null && (
                     <div className="absolute top-1 left-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#FB7299] text-[10px] font-bold text-white">
                       {getImageOrder(index)}
+                    </div>
+                  )}
+
+                  {/* Live photo badge */}
+                  {image.livePhotoVideo && (
+                    <div className="absolute bottom-1 right-1 rounded bg-[#FB7299] px-1 py-0.5 text-[10px] font-medium text-white">
+                      实况
                     </div>
                   )}
 

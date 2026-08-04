@@ -42,6 +42,7 @@ export default function EditVideoPage() {
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState("");
   const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [livePhotoVideos, setLivePhotoVideos] = useState<string[]>([]);
   const [imageDuration, setImageDuration] = useState<number | null>(5);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [selectedCoverIndex, setSelectedCoverIndex] = useState<number | null>(null);
@@ -93,6 +94,9 @@ export default function EditVideoPage() {
         // Find the current cover in image list
         const coverIdx = JSON.parse(data.imageUrls).indexOf(data.coverUrl);
         setSelectedCoverIndex(coverIdx >= 0 ? coverIdx : null);
+      }
+      if (data.livePhotoVideos) {
+        setLivePhotoVideos(JSON.parse(data.livePhotoVideos));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "加载失败");
@@ -146,6 +150,9 @@ export default function EditVideoPage() {
           description: description.trim() || null,
           coverUrl: newCoverUrl,
           imageUrls: video?.postType === "image_text" ? JSON.stringify(imageUrls) : undefined,
+          livePhotoVideos: video?.postType === "image_text" && livePhotoVideos.some((v) => v)
+            ? JSON.stringify(livePhotoVideos)
+            : undefined,
           imageDuration: video?.postType === "image_text" ? imageDuration : undefined,
         }),
       });
@@ -175,6 +182,13 @@ export default function EditVideoPage() {
     const [moved] = newUrls.splice(dragIndex, 1);
     newUrls.splice(index, 0, moved);
     setImageUrls(newUrls);
+    // Keep livePhotoVideos in sync with image order
+    const newLive = [...livePhotoVideos];
+    if (newLive.length === newUrls.length) {
+      const [movedLive] = newLive.splice(dragIndex, 1);
+      newLive.splice(index, 0, movedLive);
+      setLivePhotoVideos(newLive);
+    }
     // Update cover index if needed
     if (selectedCoverIndex !== null) {
       if (dragIndex === selectedCoverIndex) {
@@ -196,6 +210,7 @@ export default function EditVideoPage() {
   const handleRemoveImage = (index: number) => {
     const newUrls = imageUrls.filter((_, i) => i !== index);
     setImageUrls(newUrls);
+    setLivePhotoVideos((prev) => (prev.length === imageUrls.length ? prev.filter((_, i) => i !== index) : prev));
     if (selectedCoverIndex === index) {
       setSelectedCoverIndex(null);
       // Set cover to first image or fallback

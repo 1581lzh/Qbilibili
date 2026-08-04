@@ -74,8 +74,28 @@ export const videoSchema = z.object({
   vodVideoId: z.string().optional(),
   postType: z.enum(["video", "image_text"]).default("video"),
   imageUrls: z.string().optional(),
+  livePhotoVideos: z.string().optional(),
   musicUrl: safeUrl.optional(),
   musicUrls: z.string().optional(),
+  imageDuration: z.number().min(1).max(30).optional().nullable(),
+});
+
+export const videoUpdateSchema = z.object({
+  title: z
+    .string()
+    .min(1, "标题不能为空")
+    .max(100, "标题最多100个字符")
+    .trim()
+    .optional(),
+  description: z
+    .string()
+    .max(2000, "描述最多2000个字符")
+    .trim()
+    .optional()
+    .nullable(),
+  coverUrl: safeUrl.optional(),
+  imageUrls: z.string().optional(),
+  livePhotoVideos: z.string().optional(),
   imageDuration: z.number().min(1).max(30).optional().nullable(),
 });
 

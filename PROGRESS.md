@@ -323,6 +323,9 @@
 - **移动端隐藏导航按钮** — 移动端隐藏左右切换按钮（`hidden sm:block`），用户通过左右滑动切换图片，提升移动端浏览体验
 
 ### 本次会话修复
+- **图文播放器单音频循环播放声音丢失** — 当只有一个音频时，`handleAudioEnded` 调用 `setCurrentAudioIndex(0)` 不改变状态（本来就是 0），useEffect 不触发导致音频不重播。修复为单音频时直接调用 `audioRef.current.currentTime = 0` + `play()` 强制重启
+- **Next.js 版本升级** — 从 16.2.9 升级到 16.2.12
+- **构建内存限制** — `package.json` build 脚本添加 `NODE_OPTIONS="--max-old-space-size=1536"`，防止 3.6GB 小内存机器构建时 Swap 卡死 CPU 100%
 - **修复改密码后无法登录** — JWT 回调中新登录时 `token.tokenVersion` 硬编码为 `0`，但改密码后数据库 `tokenVersion` 已递增，导致新 token 在创建瞬间因版本不匹配被撤销。修复为新登录时从数据库读取实际 `tokenVersion`
 - **图片轮播 stale closure 修复** — `goToImage` 回调从依赖 `currentIndex` 改为 `setCurrentIndex(prev => ...)` 函数式更新，修复快速连续点击时滑动方向判断错误
 - **视频详情 API 缓存** — 添加 `Cache-Control: public, s-maxage=300, max-age=300`（5 分钟缓存），减少重复请求
@@ -330,9 +333,47 @@
 - **视频卡片冗余逻辑清理** — 移除永远不会触发的"无封面"分支（`coverUrl` 是必填字段）
 - **播放器点击暂停修复** — 旧代码用黑名单排除 `.prism-controlbar` 等元素，但 Aliplayer 的 `.prism-volume-control` 等控件不在 `.prism-controlbar` 内部，导致点击音量条/按钮等控件时误触发播放/暂停。修复为白名单方式：`click` 和 `touchend` 只在 `e.target === player.tag`（即直接点击 `<video>` 元素）时才切换播放/暂停。同时恢复 `touchstart` 的 `e.preventDefault()` 阻止移动端浏览器合成 `click` 事件，确保移动端保持双击暂停行为
 - **图文播放器按钮点击修复** — 图文播放器的 `onClick` 处理器在容器上无条件调用 `togglePlay()`，React 的 `stopPropagation` 无法阻止原生事件冒泡，导致点击左右切换按钮/播放按钮时也会触发暂停。修复为在容器 `onClick` 中检查 `e.target` 是否为 `button` 或 `a` 元素，是则跳过
-- **图文播放器单音频循环播放声音丢失修复** — 图文播放器在单音频循环播放模式下，音频播放完毕后声音丢失，修复为循环播放时正确重置音频状态
-- **Next.js 版本升级到 16.2.12** — 从 next@16.2.9 升级到 next@16.2.12，同步升级 eslint-config-next
-- **构建内存限制** — `package.json` 的 build 脚本添加 `NODE_OPTIONS="--max-old-space-size=1536"`，限制 Node.js 最大内存 1.5GB，防止小内存机器构建时 Swap 卡死
+
+### 实况照片（Live Photo）支持（本次会话新增）
+- **需求** — 图文投稿支持实况照片，播放时像抖音一样自动静音播放实况视频，播完继续轮播；背景音乐保持正常播放（仅视频静音）
+- **库选型调研** — 评估 `live-photo`（完整查看器）与 `motion-photo`（无头解析库）：最终发布端用 `motion-photo` 解析、`heic-normalize` 转码、`jszip` 解包；播放端自研原生 `<video>` 覆盖层（live-photo 查看器的悬停/长按交互不符合"轮播自动播放"需求）
+- **多格式解析**（`src/lib/live-photo.ts`）：
+  - Android Motion Photo：单文件 JPEG 内嵌 MP4，用 `motion-photo` 的 `MotionPhotoParser` 解析（XMP 元数据 + ftyp 回退）
+  - Apple .livp 压缩包：`jszip` 解包提取图片+视频
+  - Apple 分离格式（HEIC + MOV）：`heic-normalize` 将 HEIC 转 JPEG（Safari 原生解码 + WASM 兜底），按文件名自动配对（`IMG_1234.HEIC` + `IMG_1234.MOV`），选择顺序无关
+  - `needsLivePhotoProcessing()` 预检测避免无谓处理，普通图片仍走原压缩路径
+- **数据模型** — Video 表新增 `livePhotoVideos` 字段（JSON 数组，与 imageUrls 一一对应，`""` 表示静态图），向后兼容
+- **上传链路** — 上传页检测到实况时自动解析配对，实况视频段以 `video` 类型上传 OSS，`livePhotoVideos` 与 `imageUrls` 同序提交；上传进度分配调整（图片70% + 实况视频10% + 音乐15% + 保存5%）
+- **播放** — 轮播到实况图自动静音播放视频：
+  - 进度条对应一节显示视频实时进度（timeupdate 驱动，非倒计时）
+  - 视频完整播完（不随轮播倒计时）后自动切下一张，融入轮播节奏
+  - 暂停/恢复时视频与音频同步控制
+  - 支持循环/单次/自动连播模式
+- **时长分配** — 自动模式下静态图时长 = `(总音频时长 - 实况视频总时长) / 静态图数`（最小保底2秒），实况图 = 视频完整时长，避免有的长有的短
+- **封面** — 实况只能用静态帧（图片本身）做封面，不提供动图封面
+- **编辑** — 编辑页加载/排序/删除/保存时 `livePhotoVideos` 与 `imageUrls` 同步
+- **删除清理** — 删除视频时同步清理 OSS 中的实况视频文件
+- **tsconfig 修复** — `Qbilibili` 目录（独立旧备份仓库）被 `**/*.tsx` 误扫导致类型错误，加入 tsconfig exclude
+
+### 高斯模糊背景填充黑边（本次会话新增）
+- **视频播放器** — 使用封面图（不随内容变化）作模糊背景叠加在视频下方；判断逻辑比较「视频实际比例」与「容器实际比例」（ResizeObserver + 轮询，元数据未就绪回退封面比例），差异超 5% 才启用，自动适配移动端/PC端任意容器比例
+- **图文播放器** — 背景随当前图片动态变化，每张图 onLoad 记录真实比例与容器比较；`AnimatePresence` 让背景随内容一起交叉淡化切换（非原地突变），模糊参数 `blur-60px scale-110 opacity-80 brightness-0.5 saturate-1.25`
+- **比例判断** — 不依赖固定 16:9 阈值，基于媒体实际比例与容器实际比例的差值，自适应竖屏/横屏/全屏
+
+### 播放模式与音频修复（本次会话修复）
+- **未登录播放模式持久化修复** — `play-mode.ts` 未登录用户从 `sessionStorage` 改为 `localStorage`，刷新页面不再丢失设置
+- **单次播放音乐不停修复** — 单次模式播到最后一图只停止轮播未暂停音频，新增 `isPlaying → false` 时自动 `audio.pause()` 的 effect
+- **单次播放后恢复从头开始** — 新增 `stoppedBySingleModeRef` 标记，单次播放暂停后点击继续时，图文从头开始、音乐接续
+- **motion-dom 损坏文件修复** — `interpolate.mjs` 为 0 字节导致构建失败，重装 `motion-dom@12.40.0` 恢复
+
+### 图文播放器交互增强（本次会话）
+- **高斯模糊背景调亮** — 视频背景 `brightness(0.5)→0.9, opacity 0.85→1`；图文背景 `opacity-80→100, brightness-0.5→0.9`，消除用户反馈的偏暗问题
+- **视频背景层点击修复** — 背景 `<img>` 原用 `containerEl.insertBefore` 插入可能导致 CSS 选择器不匹配、`pointer-events:none` 失效拦截控件点击；改为插入 `.prism-player` 内部第一个子元素 + 内联强制 `pointer-events:none` + `z-index:0`，控件层提升 `z-index:2`，修复点击控件误触发播放/暂停
+- **图文左右切换按钮修复（回归 bug）** — 用户用控制台 `elementFromPoint` 诊断确认：按钮渲染正常但命中测试结果是主图（`z-10`），因按钮无 z-index 被主图盖住导致点击失效（只能触发暂停）。修复加 `z-30`；hover 时背景蒙版加深 40%（`bg-black/50→90`）
+- **图文进度条增强** — 每节从 `<div>` 改为 `<button>`，点击跳转到对应图片；悬停加粗 `3px→9px`（固定容器 + items-center 实现中线对称扩展，80ms 过渡）
+- **图文控制栏空白点击修复** — 控制栏加 `data-controlbar` 标记，原生 onClick 命中时只切换控制栏可见性，不触发播放/暂停
+- **图文音量控制** — 控制栏新增音量按钮（Volume2/Volume1/VolumeX 图标随音量变化），点击静音/取消静音，悬停弹出滑块调节背景音乐音量；滑块用 `linear-gradient` 显示粉色填充进度，注入 CSS（`.bili-vol-slider`）定义 thumb 圆心对齐轨道中线——Tailwind 任意变体 `[&::-webkit-slider-thumb]` 对 range 伪元素不可靠（实测不生效），改用注入 `<style>` 的确定性方案
+- **图文中心蒙版动画修复（回归 bug）** — 子代理调研确认：中心指示器 `motion.div` 无 z-index（auto）被主图 `z-10` 盖住，触发逻辑正常但看不到。加 `z-40` 后与视频播放器 `.bili-anim`（z-9999）行为一致
 
 ### 性能优化（本次会话）
 - **搜索 API 全表扫描优化** — 搜索从加载全部评论/视频到内存再过滤，改为数据库 `LIKE` 预过滤+内存高亮定位，大幅减少内存占用
@@ -375,20 +416,22 @@
 3. **通配符证书** — 当前证书仅覆盖 `your-domain.com` + `www.your-domain.com`，子域名 HTTPS 需更换 `*.your-domain.com` 证书
 4. **HSTS** — 启用 `Strict-Transport-Security` 头，强制浏览器 HTTPS
 5. **密码哈希存储** — 使用已安装的 bcryptjs 对密码进行哈希存储（MVP 技术债务）
+6. **实况照片实测** — 实况照片解析/播放需用真实文件验证（`.livp` / Android Motion Photo / 分离的 HEIC+MOV），当前仅代码层面实现未跑真实文件
 
 ### 中期
-6. **无限滚动分页** — 首页视频列表无限滚动加载
-7. **Toast 消息提示** — 轻量级提示框替代 alert/confirm 弹窗
-8. **视频编辑功能** — 支持修改标题/描述
-9. **视频详情优化** — 播放量统计、点赞数实时更新
+7. **无限滚动分页** — 首页视频列表无限滚动加载
+8. **Toast 消息提示** — 轻量级提示框替代 alert/confirm 弹窗
+9. **视频编辑功能** — 支持修改标题/描述
+10. **视频详情优化** — 播放量统计、点赞数实时更新
 
 ### 长期
-10. **监控日志** — 错误监控、用户行为分析
+11. **监控日志** — 错误监控、用户行为分析
 
 ## 技术债务
 - 密码明文存储，生产环境需用 bcrypt 哈希（bcryptjs 已安装未启用，已记录为 MVP 特性）
 - CSRF 保护不完整，低危路由未启用（已记录为 MVP 特性）
 - OSS AccessKey 存在 .env 中，生产环境应使用 RAM 子账号
+- 实况照片上传选择普通大图（混合实况时）跳过客户端压缩，超 15MB 可能失败（`processImageFiles` 路径未集成压缩逻辑）
 
 ## 已知问题
 - 部分图标使用 lucide-react，未完全统一风格

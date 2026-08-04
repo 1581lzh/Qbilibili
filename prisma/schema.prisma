@@ -38,6 +38,7 @@ model Video {
   musicUrl        String?  // First music file URL (for backward compatibility)
   musicUrls       String?  // JSON array of music URLs (for multi-audio support)
   imageDuration   Float?   // Image preview duration in seconds (image_text only, null=auto)
+  livePhotoVideos String?  // JSON array of video URLs, paired 1:1 with imageUrls (empty string = static image)
   audioNormalized Boolean  @default(false)
   normalizedUrl   String?
   author          User     @relation(fields: [authorId], references: [id])

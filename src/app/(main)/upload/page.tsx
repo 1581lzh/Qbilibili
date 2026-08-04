@@ -54,7 +54,7 @@ export default function UploadPage() {
 
   // Image-text posting state
   const [activeTab, setActiveTab] = useState<"video" | "image_text">("video");
-  const [images, setImages] = useState<{ file: File; preview: string }[]>([]);
+  const [images, setImages] = useState<{ file: File; preview: string; livePhotoVideo: File | null }[]>([]);
   const [selectedCoverIndex, setSelectedCoverIndex] = useState<number | null>(null);
   const [music, setMusic] = useState<{ file: File; preview: string }[]>([]);
   const [imageDuration, setImageDuration] = useState<number | null>(5);
@@ -164,7 +164,7 @@ export default function UploadPage() {
         return;
       }
       const preview = URL.createObjectURL(result.file);
-      setImages((prev) => [...prev, { file: result.file, preview }]);
+      setImages((prev) => [...prev, { file: result.file, preview, livePhotoVideo: null }]);
     } else {
       // Music compression - for now just add the original
       const preview = URL.createObjectURL(compressTarget.file);
@@ -366,14 +366,28 @@ export default function UploadPage() {
         // Upload images
         setUploadStatus("正在上传图片...");
         const imageUrls: string[] = [];
-        
+        const livePhotoVideos: string[] = [];
+
         for (let i = 0; i < images.length; i++) {
           const imageUrl = await uploadFileToOss(images[i].file, "image", (p) => {
-            const baseProgress = (i / images.length) * 80;
-            const stepProgress = (p / 100) * (80 / images.length);
+            const baseProgress = (i / images.length) * 70;
+            const stepProgress = (p / 100) * (70 / images.length);
             setUploadProgress(baseProgress + stepProgress);
           });
           imageUrls.push(imageUrl);
+
+          // Upload paired live-photo video if present
+          if (images[i].livePhotoVideo) {
+            setUploadStatus(`正在上传实况视频 ${i + 1}...`);
+            const liveVideoUrl = await uploadFileToOss(images[i].livePhotoVideo!, "video", (p) => {
+              const baseProgress = 70 + (i / images.length) * 10;
+              const stepProgress = (p / 100) * (10 / images.length);
+              setUploadProgress(baseProgress + stepProgress);
+            });
+            livePhotoVideos.push(liveVideoUrl);
+          } else {
+            livePhotoVideos.push("");
+          }
         }
 
         // Upload music if present
@@ -410,6 +424,7 @@ export default function UploadPage() {
             coverUrl: coverUrl || undefined,
             postType: "image_text",
             imageUrls: JSON.stringify(imageUrls),
+            livePhotoVideos: livePhotoVideos.some((v) => v) ? JSON.stringify(livePhotoVideos) : undefined,
             musicUrls: musicUrls.length > 0 ? JSON.stringify(musicUrls) : undefined,
             imageDuration: imgDuration,
           }),

@@ -63,6 +63,7 @@ H:\bilibili/
 │   │       ├── search/        # 搜索 API（视频/评论，任意字符匹配）
 │   │       ├── user/          # 用户相关 API
 │   │       │   ├── profile/   # 个人资料（GET/PUT）
+│   │       │   ├── play-mode/ # 播放模式偏好（GET/PUT，视频和图文共享）
 │   │       │   ├── account/   # 注销账号（DELETE，需密码验证）
 │   │       │   ├── favorites/ # 收藏列表
 │   │       │   ├── likes/     # 视频点赞列表
@@ -105,7 +106,7 @@ H:\bilibili/
 │   │   └── video/             # 视频相关组件
 │   │       ├── video-card.tsx             # 视频卡片（同名同色头像）
 │   │       ├── video-player.tsx           # 视频播放器（Aliplayer + 空格键暂停/播放）
-│   │       ├── video-play-section.tsx     # 播放区域（含图片轮播组件，支持图文播放，播放模式切换（循环/单次/自动连播），PC 单击暂停 + 移动端双击暂停，底部图片进度条，移动端单击切换控制栏）
+│   │       ├── video-play-section.tsx     # 播放区域（含图片轮播组件，支持图文播放，播放模式切换（循环/单次/自动连播），PC 单击暂停 + 移动端双击暂停，底部图片进度条（点击跳转+悬停加粗），音量控制（静音+滑块），中心蒙版动画，移动端单击切换控制栏）
 │   │       ├── video-like-button.tsx      # 点赞按钮（乐观更新，即时响应）
 │   │       ├── video-favorite-button.tsx  # 收藏按钮（乐观更新，即时响应）
 │   │       ├── video-delete-button.tsx    # 删除视频按钮
@@ -125,6 +126,7 @@ H:\bilibili/
 │   │   ├── image.ts           # 图片/URL 优化工具（toHttps + OSS 图片处理参数生成）
 │   │   ├── image-compress.ts  # 图片压缩工具（Canvas API，15MB限制，2K分辨率限制）
 │   │   ├── music-compress.ts  # 音乐压缩工具（Web Audio API，50MB限制）
+│   │   ├── live-photo.ts      # 实况照片识别/解析工具（Motion Photo 单文件解析 + .livp 解包 + HEIC 转码 + 同名配对）
 │   │   ├── fetch-cache.ts     # 客户端 fetch 缓存工具（TTL + Map 缓存，替代裸 fetch）
 │   │   ├── signals.ts         # 类型安全的 sessionStorage 信号工具（autoPlayVideo/highlightComment）
 │   │   ├── vod-cache.ts       # VOD playAuth 缓存模块（模块级 Map + 60秒 TTL）
@@ -167,8 +169,8 @@ H:\bilibili/
 - `name`: 用户名（唯一）
 - `password`: 密码（**MVP 阶段为明文存储，生产环境应使用 bcryptjs 哈希**）
 - `role`: 角色（默认 "user"）
-- `tokenVersion`: 会话版本号（修改密码时递增，用于使旧会话失效）
 - `playMode`: 播放模式偏好（默认 "loop"，可选 "loop"/"single"/"next"，视频和图文共享）
+- `tokenVersion`: 会话版本号（修改密码时递增，用于使旧会话失效）
 - `avatar`: 头像 URL
 - `createdAt`: 创建时间
 
@@ -183,6 +185,7 @@ H:\bilibili/
 - `views`: 播放次数
 - `postType`: 投稿类型（"video" 或 "image_text"）
 - `imageUrls`: 图片 URL 列表（JSON 字符串，图文投稿时使用）
+- `livePhotoVideos`: 实况照片视频 URL 列表（JSON 字符串，与 imageUrls 一一对应，空字符串表示静态图）
 - `musicUrl`: 第一首背景音乐 URL（向后兼容）
 - `musicUrls`: 背景音乐 URL 列表（JSON 字符串，支持多首音频拼接）
 - `imageDuration`: 图片轮播时长（秒，仅图文类型，null=自动模式，1-30=手动模式）
@@ -246,7 +249,7 @@ H:\bilibili/
 ### 视频相关
 - `GET /api/videos?q=` — 获取视频列表（支持搜索）
 - `POST /api/videos` — 投稿（写入数据库）
-- `PUT /api/videos/[videoId]` — 更新视频（仅作者，支持修改标题、描述、封面、图片顺序、轮播时长）
+- `PUT /api/videos/[videoId]` — 更新视频（仅作者，支持修改标题、描述、封面、图片顺序、实况视频配对、轮播时长）
 - `DELETE /api/videos/[videoId]` — 删除视频（仅作者，清理 OSS 文件和关联数据）
 - `GET /api/videos/[videoId]/detail` — 获取视频详情（含 nextVideoId、likeCount、favoriteCount、liked、favorited，用于自动连播和切换视频后状态同步）
 - `GET /api/videos/recommendations` — 获取推荐列表
@@ -260,7 +263,7 @@ H:\bilibili/
 
 ### 文件上传
 - `POST /api/upload` — 上传视频/封面/图片/音乐文件到阿里云 OSS
-  - 视频：最大 500MB，路径 `videos/`
+  - 视频：最大 500MB，路径 `videos/`（含实况照片视频段）
   - 封面：最大 5MB，路径 `covers/`
   - 图片：最大 15MB，路径 `images/`（支持 jpg/png/gif/webp）
   - 音乐：最大 50MB，路径 `music/`（支持 mp3/wav/ogg/aac/flac）
@@ -567,6 +570,25 @@ sudo firewall-cmd --reload
 35. **图文播放优化** — 播放/暂停图标正确显示（暂停显示▶，播放显示⏸）；浏览器阻止自动播放时自动降级到暂停状态，用户交互后恢复
 36. **音频响度标准化** — 上传视频后自动使用 FFmpeg loudnorm（EBU R128，-24 LUFS）标准化音频响度，支持 OSS 和 VOD 两种视频来源，异步队列处理，非阻塞播放；启动时自动回填未处理的旧视频
 37. **Emoji 支持** — 评论/投稿支持 Unicode emoji 和抖音表情包，emoji 选择器面板（分类浏览 + 搜索），contentEditable 实时预览 emoji 图片，抖音表情包 214 个（存储在 public/emoji/douyin/），B站格式兼容（`:表情名:`语法）
+38. **实况照片（Live Photo）支持** — 图文投稿支持实况照片，播放时像抖音一样自动静音播放实况视频，播完继续轮播
+  - **多格式解析**（`src/lib/live-photo.ts`）：
+    - Android Motion Photo：单文件 JPEG 内嵌 MP4，用 `motion-photo` 的 `MotionPhotoParser` 解析（XMP 元数据 + ftyp 回退）
+    - Apple .livp 压缩包：用 `jszip` 解包提取图片+视频
+    - Apple 分离格式（HEIC + MOV）：用 `heic-normalize` 将 HEIC 转 JPEG（Safari 原生解码 + WASM 兜底），按文件名自动配对（如 `IMG_1234.HEIC` + `IMG_1234.MOV`），选择顺序无关
+  - **存储**：Video 表新增 `livePhotoVideos` 字段（JSON 数组，与 imageUrls 一一对应，`""` 表示静态图），实况视频段以 video 类型上传 OSS
+  - **播放**：轮播到实况图自动静音播放视频，对应进度条一节显示视频实时进度（timeupdate 驱动，非倒计时）；视频完整播完后再切下一张，融入轮播节奏；背景音乐保持正常播放（仅视频静音）
+  - **时长分配**：自动模式下静态图时长 = `(总音频时长 - 实况视频总时长) / 静态图数`，实况图 = 视频完整时长，避免有的长有的短
+  - **封面**：实况只能用静态帧（图片本身）做封面，不提供动图封面
+  - **编辑**：编辑页图片排序/删除时 livePhotoVideos 同步，保存时一并提交
+
+### 图文播放器交互增强（本次会话）
+- **高斯模糊背景调亮** — 视频背景 `brightness(0.5)→0.9, opacity 0.85→1`；图文背景 `opacity-80→100, brightness-0.5→0.9`，消除偏暗
+- **视频背景层点击修复** — 背景 `<img>` 插入 `.prism-player` 内部第一个子元素并内联强制 `pointer-events:none` + `z-index:0`，控件层提升 `z-index:2`，修复点击控件误触发播放/暂停
+- **图文左右切换按钮修复** — 按钮加 `z-30`（原被主图 `z-10` 盖住导致点击失效，用控制台 `elementFromPoint` 诊断确认）；hover 时背景蒙版加深 40%（`bg-black/50→90`）
+- **图文进度条增强** — 每节从 `<div>` 改为 `<button>`，点击跳转到对应图片；悬停加粗 `3px→9px`（中线对称扩展，80ms 过渡）
+- **图文控制栏空白点击修复** — 控制栏加 `data-controlbar` 标记，点击控制栏空白只切换可见性，不触发播放/暂停
+- **图文音量控制** — 控制栏新增音量按钮（Volume2/Volume1/VolumeX 图标随音量变化），点击静音/取消静音，悬停弹出滑块调节背景音乐音量（渐变显示填充进度，注入 CSS 让 thumb 圆心对齐轨道中线，Tailwind 任意变体对 range 伪元素不可靠）
+- **图文中心蒙版动画修复** — 中心指示器加 `z-40`（原无 z-index 被主图 `z-10` 盖住导致不显示，子代理调研确认根因）
 
 - **图片轮播触摸处理** — ImageCarousel 组件（`video-play-section.tsx`）使用与视频播放器一致的原生 `addEventListener` 方式处理触摸事件。React 合成 `onTouchStart` 默认注册为 passive listener，`preventDefault()` 会被浏览器忽略，因此必须使用原生 API + `{ capture: true, passive: false }` 才能阻断 click 事件合成。所有回调通过 ref 访问（`togglePlayRef`、`handleManualSwitchRef`、`currentIndexRef`、`imagesLengthRef`），useEffect 依赖数组为空，避免状态变化导致监听器重建丢失 `lastTap` 时间戳。PC 端 click 处理器始终绑定（不使用 `ontouchstart` 守卫），与视频播放器对齐——移动端通过 `touchstart.preventDefault()` 阻止合成 click，触摸屏笔记本的鼠标和触摸两种输入模式可共存。
 - **中心蒙版图标样式统一** — ImageCarousel 的播放/暂停中心指示器使用与视频播放器 `.bili-anim` 完全一致的 SVG 图标：暂停图标使用 fill 实心 `<rect>`（非 stroke 描边 `<path>`），播放图标使用 fill `<polygon>`，均为 `fill="#fff"`、`viewBox="0 0 24 24"`、尺寸 `40%`（`h-2/5 w-2/5`）。
