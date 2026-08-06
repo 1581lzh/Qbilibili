@@ -366,6 +366,63 @@
 - **单次播放后恢复从头开始** — 新增 `stoppedBySingleModeRef` 标记，单次播放暂停后点击继续时，图文从头开始、音乐接续
 - **motion-dom 损坏文件修复** — `interpolate.mjs` 为 0 字节导致构建失败，重装 `motion-dom@12.40.0` 恢复
 
+### 实况照片播放增强 + 上传预览（本次会话）
+- **图文投稿上传实况视频预览** — 支持在图文投稿中直接选择 ≤4 秒的短视频作为实况照片：
+  - `readVideoDuration()` 读取视频时长（`live-photo.ts`），`extractVideoCover()` 提取首帧作封面
+  - 视频时长校验：≤4s 作为实况加入；>4s 弹窗提示（「前往视频投稿」/「确定」），确认后自动切到视频投稿 tab 并预填视频
+  - `LivePhotoPreview` 组件：大预览/缩略图显示封面帧 + 播放按钮，点击后静音播放实况（播完自动暂停停在末帧）
+  - 上传提示文案说明支持 ≤4 秒短视频作为实况
+- **实况视频与图片配对增强** — `matchLiveVideo()` 支持同名 + 相似名配对：
+  - 同名：`IMG_1234.MOV` + `IMG_1234.HEIC` 自动合并为实况项
+  - 相似名：`1.jpg` + `1_实况.mp4`（或 `_live`/`live`/`_mov`/`mov`，支持 `1_实况2` 带序号变体）也合并
+  - 防误配：剥离后缀后必须与图片基名完全相等，`11.mp4` 不会误配到 `1.jpg`
+  - 未配对视频自动提取封面帧作为独立实况项（不再静默丢弃）
+  - 配对视频时长超限时忽略视频仅保留静态图并提示
+- **图文投稿预览丢失修复** — 移除 `ImageTextUploadPage` 卸载时 `URL.revokeObjectURL(preview)`，修复切换「视频投稿/图文投稿」标签后图文预览丢失问题（preview URL 由父组件持有，页面整体卸载时浏览器自动释放）
+- **实况照片播放阶段机** — 遇到实况：预览 1s 封面帧 → 封面淡出+实况淡入 → 实况完整播放 → 实况淡出+封面淡入 → 再预览 1s → 循环轮播
+  - 阶段机：`static-preview → live-fade-in → live-fade-out → static-preview`，用链式定时器 + epoch 守卫推进
+  - 单图实况 loop 循环重播：`liveRestartTick` 信号（currentIndex 不变时 React 不重渲染，用独立计数器触发重跑）
+  - 实况结束用 React 原生 `onEnded={handleLiveEnded}`（避免 effect addEventListener 绑定时机竞态导致不触发）
+  - **已解决**：半透明重叠交叉淡化已实现（见下方「实况半透明重叠交叉淡化」）
+
+### 实况半透明重叠交叉淡化（本次会话新增，已解决）
+- **需求** — 实况图播放流程：预览 1s 封面帧 → 封面/实况 0.8s 半透明重叠交叉淡化 → 实况完整播放 → 实况/封面 0.8s 交叉淡化 → 预览 1s → 循环。关键：过渡时两幅画面**同时在画面中、均半透明、像素级互相混合**
+- **最终方案（单 canvas 像素级混合）**：
+  - 真 `<video>` `opacity:0` + `absolute inset-0` 隐藏，仅作 canvas 帧源（继续硬件解码、驱动 `onEnded`/进度条/首帧读取）
+  - 新增 `<canvas>` `absolute inset-0`，`requestAnimationFrame` 逐帧 `drawImage` 镜像视频帧；同一画布里用 `globalAlpha` 同时绘制「封面帧（`1-fade`）+ 实况帧（`fade`）」，实现真正的像素级半透明交叉淡化，**不依赖任何元素层叠关系**
+  - 封面帧用 `Image`（与 DOM 封面 img 同 URL，走浏览器缓存），`drawImage` 按 `object-contain` 等比缩放居中（`Math.min`），避免裁切
+  - 封面 `<img>` 常驻渲染并置于 canvas 下方（`z-11` < canvas `z-12`），作为 canvas 首帧绘制前的无缝底衬（消除淡入空档闪烁；后续「实况交叉淡化完善」小节详述）
+  - 首帧就绪（`loadeddata`）后再开始 0→1 淡入，避免淡入时 canvas 为空；1.5s 兜底强制淡入防卡死
+  - 淡入淡出动画在 canvas 内用 `easeInOutQuad` 缓动推进（`liveFadeRef` + `fadeAnimRef`），`onEnded` 时反向淡化回封面
+  - 淡入/淡出/预览/循环阶段机、`liveRestartTick` 单图循环、进度条驱动逻辑全部保留
+- **SSR 播放页实况数据修复** — `video/[id]/page.tsx` 传给 VideoPlaySection 的对象补上 `livePhotoVideos` / `musicUrls` 字段（此前遗漏导致首屏进入实况不播放，切换视频后才正常）
+- **Mixed Content 修复** — ImageCarousel 的图片/实况视频/音频 URL 统一用 `toHttps()` 转 HTTPS，消除 HTTPS 页面加载 HTTP 资源的拦截
+
+### 实况交叉淡化完善（本次会话）
+- **封面→实况闪烁消除** — 封面 `<img>` 从「实况阶段卸载」改为常驻渲染并置于 canvas 下方（`z-11` < canvas `z-12`）。canvas 首帧未画出的瞬间由封面 img 作无缝底衬，消除「封面消失 → canvas 空档」的闪烁
+- **暂停保留进度原地暂停** — 实况播放中暂停不再跳回封面：阶段机暂停分支改为 `video.pause()` 原地冻结画面与进度；恢复时从当前位置直接续播；若恰好在播完淡出时刻暂停则重新淡入从头播
+- **播放自动触发加 isPlaying 守卫** — 独立播放 effect 加 `isPlaying` 依赖，防止预览淡入窗口内暂停时视频仍自动播放
+- **元数据/进度监听独立拆分** — 从阶段机拆出独立 effect 驱动 `loadedmetadata`/`timeupdate`（进度条与时长分配），暂停/恢复后依然生效
+
+### 音量条自动隐藏 + 音量持久化（本次会话）
+- **音量条 2 秒自动隐藏** — 悬停音量图标弹出音量条并启动 2s 定时器（鼠标不滑入则自动消失）；滑入滑块取消定时器保持显示（拖动中不中断），移出滑块立即隐藏；控制栏 group-hover 隐藏仍生效
+- **音量状态持久化（仿播放模式）** — User 表新增 `volume`/`muted` 字段；新增 `src/lib/volume.ts`（`getSavedVolume`/`fetchVolume`/`updateVolume`，登录用户存数据库、未登录 fallback localStorage/sessionStorage）+ `/api/user/volume` GET/PUT；ImageCarousel 挂载时从数据库恢复音量/静音，调节/静音时保存；滑块拖动 300ms 防抖避免拖拽时刷请求
+
+### 深色模式按用户持久化（本次会话）
+- **User 表新增 `theme` 字段**（light/dark/system，默认 system）
+- **新增 `src/lib/theme.ts`** — `getSavedTheme`/`fetchTheme`/`updateTheme`，localStorage 键沿用 `theme`（防白闪脚本零改动）
+- **新增 `/api/user/theme` GET/PUT 路由**（含 CSRF 校验）
+- **ThemeProvider 接入 Session** — 从 `SessionProvider` 外层移入内层，`useSession()` 拿 userId：登录用户主题存数据库（跨设备/刷新恢复），未登录 fallback localStorage；登录后异步覆盖本地值，保证即时渲染与防白闪一致
+
+### 模糊背景纯黑修复（本次会话）
+- **修复** — 图文模糊背景 `<img>` 移除 `loading="lazy"`（动态挂载、初始透明的层里浏览器懒加载 IntersectionObserver 判断不可靠 → 背景图不加载 → 露出底下 `bg-black` 纯黑），改为与封面一致的 eager 加载（同一 URL 已在缓存无额外开销）
+
+### 输入框适配 + 输入长度限制（本次会话）
+- **输入框滚动条适配深色模式** — `globals.css` 为所有 `textarea` / `input` / `[contenteditable="true"]` 添加统一滚动条样式（滑块 `#d4d4d8`/`#52525b`，轨道 `#f4f4f5`/`#27272a`），覆盖评论区、标题、简介、搜索框等
+- **用户名最多 14 字符** — `validation.ts` `usernameSchema` 加 `.max(14)`，`loginSchema` 同步；登录/注册弹窗、独立登录/注册页、个人中心账号设置输入框加 `maxLength={14}`
+- **密码最多 18 字符** — `validation.ts` `passwordSchema` 加 `.max(18)`，`loginSchema` 同步；各密码输入框（含注销确认密码）加 `maxLength={18}`
+- **描述/简介最多 1000 字符** — `validation.ts` `videoSchema`/`videoUpdateSchema` description 上限从 2000 改为 1000；图文描述、视频简介、编辑页描述输入框加 `maxLength={1000}` + 计数显示
+
 ### 图文播放器交互增强（本次会话）
 - **高斯模糊背景调亮** — 视频背景 `brightness(0.5)→0.9, opacity 0.85→1`；图文背景 `opacity-80→100, brightness-0.5→0.9`，消除用户反馈的偏暗问题
 - **视频背景层点击修复** — 背景 `<img>` 原用 `containerEl.insertBefore` 插入可能导致 CSS 选择器不匹配、`pointer-events:none` 失效拦截控件点击；改为插入 `.prism-player` 内部第一个子元素 + 内联强制 `pointer-events:none` + `z-index:0`，控件层提升 `z-index:2`，修复点击控件误触发播放/暂停
@@ -411,12 +468,13 @@
 ## 下一步打算
 
 ### 短期
-1. **Cloudflare R2 替代阿里云 OSS** — OSS 约 2 个月后过期，计划用 Cloudflare R2 完全替代。R2 免费 10GB/月 + 出站流量永久免费。方案：Pre-signed URL 直传（服务器签发临时 URL，浏览器直传 R2），不经过服务器内存。需安装 `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`，删除 `ali-oss` 和旧 `/api/upload` 接口。VOD 路径不变。计划文件：`.mimocode/plans/1784085656280-misty-garden.md`
-2. **VOD 断点续传** — 上传中断后恢复（aliyun-upload-sdk 支持 checkpoint）
-3. **通配符证书** — 当前证书仅覆盖 `your-domain.com` + `www.your-domain.com`，子域名 HTTPS 需更换 `*.your-domain.com` 证书
-4. **HSTS** — 启用 `Strict-Transport-Security` 头，强制浏览器 HTTPS
-5. **密码哈希存储** — 使用已安装的 bcryptjs 对密码进行哈希存储（MVP 技术债务）
-6. **实况照片实测** — 实况照片解析/播放需用真实文件验证（`.livp` / Android Motion Photo / 分离的 HEIC+MOV），当前仅代码层面实现未跑真实文件
+1. ~~**实况照片半透明重叠交叉淡化**~~ — 已实现（单 canvas 像素级混合方案，见「已完成工作」实况章节）
+2. **Cloudflare R2 替代阿里云 OSS** — OSS 约 2 个月后过期，计划用 Cloudflare R2 完全替代。R2 免费 10GB/月 + 出站流量永久免费。方案：Pre-signed URL 直传（服务器签发临时 URL，浏览器直传 R2），不经过服务器内存。需安装 `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner`，删除 `ali-oss` 和旧 `/api/upload` 接口。VOD 路径不变。计划文件：`.mimocode/plans/1784085656280-misty-garden.md`
+3. **VOD 断点续传** — 上传中断后恢复（aliyun-upload-sdk 支持 checkpoint）
+4. **通配符证书** — 当前证书仅覆盖 `your-domain.com` + `www.your-domain.com`，子域名 HTTPS 需更换 `*.your-domain.com` 证书
+5. **HSTS** — 启用 `Strict-Transport-Security` 头，强制浏览器 HTTPS
+6. **密码哈希存储** — 使用已安装的 bcryptjs 对密码进行哈希存储（MVP 技术债务）
+7. **实况照片实测** — 实况照片解析/播放需用真实文件验证（`.livp` / Android Motion Photo / 分离的 HEIC+MOV），当前仅代码层面实现未跑真实文件
 
 ### 中期
 7. **无限滚动分页** — 首页视频列表无限滚动加载

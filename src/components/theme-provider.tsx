@@ -1,8 +1,8 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
-
-type Theme = "light" | "dark" | "system";
+import { useSession } from "next-auth/react";
+import { type Theme, fetchTheme, updateTheme, getSavedTheme } from "@/lib/theme";
 
 const ThemeContext = createContext<{
   theme: Theme;
@@ -24,15 +24,25 @@ function getSystemTheme(): "light" | "dark" {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
+  const { data: session } = useSession();
+  const userId = session?.user?.id ?? null;
   const [theme, setThemeState] = useState<Theme>("system");
   const [resolved, setResolved] = useState<"light" | "dark">("light");
 
+  // 初始主题：先读 localStorage（保持即时渲染，与防白闪脚本一致），
+  // 登录用户再异步从数据库恢复（跨设备/刷新同步，覆盖本地值）
   useEffect(() => {
-    const saved = localStorage.getItem("theme") as Theme | null;
-    if (saved && ["light", "dark", "system"].includes(saved)) {
-      setThemeState(saved);
-    }
+    setThemeState(getSavedTheme());
   }, []);
+
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    fetchTheme(userId).then((t) => {
+      if (!cancelled) setThemeState(t);
+    });
+    return () => { cancelled = true; };
+  }, [userId]);
 
   useEffect(() => {
     const r = theme === "system" ? getSystemTheme() : theme;
@@ -59,7 +69,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const setTheme = (t: Theme) => {
     document.documentElement.classList.add("dark-transition");
     setThemeState(t);
-    localStorage.setItem("theme", t);
+    updateTheme(t, userId);
     setTimeout(() => {
       document.documentElement.classList.remove("dark-transition");
     }, 350);

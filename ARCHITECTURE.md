@@ -64,6 +64,8 @@ H:\bilibili/
 │   │       ├── user/          # 用户相关 API
 │   │       │   ├── profile/   # 个人资料（GET/PUT）
 │   │       │   ├── play-mode/ # 播放模式偏好（GET/PUT，视频和图文共享）
+│   │       │   ├── volume/    # 图文播放器音量偏好（GET/PUT，volume/muted）
+│   │       │   ├── theme/     # 深色模式主题偏好（GET/PUT，light/dark/system）
 │   │       │   ├── account/   # 注销账号（DELETE，需密码验证）
 │   │       │   ├── favorites/ # 收藏列表
 │   │       │   ├── likes/     # 视频点赞列表
@@ -126,11 +128,13 @@ H:\bilibili/
 │   │   ├── image.ts           # 图片/URL 优化工具（toHttps + OSS 图片处理参数生成）
 │   │   ├── image-compress.ts  # 图片压缩工具（Canvas API，15MB限制，2K分辨率限制）
 │   │   ├── music-compress.ts  # 音乐压缩工具（Web Audio API，50MB限制）
-│   │   ├── live-photo.ts      # 实况照片识别/解析工具（Motion Photo 单文件解析 + .livp 解包 + HEIC 转码 + 同名配对）
+│   │   ├── live-photo.ts      # 实况照片识别/解析工具（Motion Photo 单文件解析 + .livp 解包 + HEIC 转码 + 同名/相似名配对 + readVideoDuration 时长读取 + extractVideoCover 首帧提取）
 │   │   ├── fetch-cache.ts     # 客户端 fetch 缓存工具（TTL + Map 缓存，替代裸 fetch）
 │   │   ├── signals.ts         # 类型安全的 sessionStorage 信号工具（autoPlayVideo/highlightComment）
 │   │   ├── vod-cache.ts       # VOD playAuth 缓存模块（模块级 Map + 60秒 TTL）
 │   │   ├── play-mode.ts       # 播放模式共享模块（PlayMode 类型 + fetchPlayMode/updatePlayMode，视频/图文统一）
+│   │   ├── volume.ts          # 音量偏好共享模块（VolumeState + fetchVolume/updateVolume/getSavedVolume，登录存库/未登录本地降级）
+│   │   ├── theme.ts           # 深色模式主题共享模块（Theme + fetchTheme/updateTheme/getSavedTheme）
 │   │   ├── audio-normalize.ts # FFmpeg 音频响度标准化服务（EBU R128，-14 LUFS）
 │   │   ├── audio-queue.ts     # 音频处理异步队列（内存队列 + Worker，5秒轮询）
 │   │   ├── emoji.ts           # Emoji 工具函数（Unicode emoji 解析 + 抖音表情包匹配）
@@ -170,6 +174,9 @@ H:\bilibili/
 - `password`: 密码（**MVP 阶段为明文存储，生产环境应使用 bcryptjs 哈希**）
 - `role`: 角色（默认 "user"）
 - `playMode`: 播放模式偏好（默认 "loop"，可选 "loop"/"single"/"next"，视频和图文共享）
+- `volume`: 图文播放器背景音乐音量（默认 1，0-1）
+- `muted`: 图文播放器是否静音（默认 false）
+- `theme`: 深色模式主题（默认 "system"，可选 "light"/"dark"/"system"）
 - `tokenVersion`: 会话版本号（修改密码时递增，用于使旧会话失效）
 - `avatar`: 头像 URL
 - `createdAt`: 创建时间
@@ -236,6 +243,10 @@ H:\bilibili/
 - `PUT /api/user/profile` — 修改用户名/密码
 - `GET /api/user/play-mode` — 获取用户播放模式偏好（loop/single/next）
 - `PUT /api/user/play-mode` — 更新用户播放模式偏好
+- `GET /api/user/volume` — 获取图文播放器音量偏好（volume/muted）
+- `PUT /api/user/volume` — 更新图文播放器音量偏好
+- `GET /api/user/theme` — 获取用户深色模式主题（light/dark/system）
+- `PUT /api/user/theme` — 更新用户深色模式主题
 - `GET /api/user/favorites` — 获取收藏列表
 - `GET /api/user/likes` — 获取视频点赞列表
 - `GET /api/user/uploads` — 获取我的投稿列表
@@ -354,10 +365,11 @@ VOD_SPACE_NAME=your-space-name
 
 ### 输入验证
 - 所有用户输入通过 zod schema 验证（`src/lib/validation.ts`）
-- 用户名：非空，仅允许字母、数字、下划线、中文
-- 密码：非空，无长度限制（**MVP 阶段未强制最小长度，生产环境应要求最少 8 位**）
+- 用户名：非空，最多 14 字符，仅允许字母、数字、下划线、中文
+- 密码：非空，最多 18 字符（**MVP 阶段未强制最小长度，生产环境应要求最少 8 位**）
 - 评论：0-1000 字符 + 可选图片数组（最多 7 张，每张为合法 URL），文字或图片至少一项
 - 视频标题：1-100 字符
+- 视频描述/图文描述：最多 1000 字符
 - URL：验证格式 + 禁止 `..` 和 `\` 路径穿越序列
 - 评论图片：前端 5MB 限制 + 格式白名单（jpg/png/gif/webp），后端 15MB 限制
 
@@ -544,7 +556,7 @@ sudo firewall-cmd --reload
 9. **头像悬浮菜单** — Header 头像悬停 140ms 弹出菜单（含"我的评论"）
 10. **基础互动** — 点赞（视频/评论）、收藏、评论（支持多层嵌套回复，递归删除，回车发送，图片附件）
 11. **搜索功能** — 200ms 防抖自动搜索，视频/评论切换，任意字符匹配，红色高亮
-12. **深色模式** — Header 太阳/月亮一键切换，支持 light/dark/system，localStorage 持久化
+12. **深色模式** — Header 太阳/月亮一键切换，支持 light/dark/system，登录用户按用户存数据库（User.theme，跨设备/刷新恢复），未登录 fallback localStorage；localStorage 键沿用 `theme`，防白闪脚本零改动
 13. **我的评论** — 个人主页评论标签，显示评论视频/回复他人，支持删除
 14. **评论跳转** — 从个人中心（点赞/评论列表）点击评论卡片，跳转到视频播放页并自动定位到目标评论，粉色边框+泛光闪烁 2 下高亮
 15. **点赞详情** — 我的点赞页面新增左侧竖向菜单，支持查看：视频点赞、我点赞的评论、谁点赞了我的评论
@@ -577,6 +589,9 @@ sudo firewall-cmd --reload
     - Apple 分离格式（HEIC + MOV）：用 `heic-normalize` 将 HEIC 转 JPEG（Safari 原生解码 + WASM 兜底），按文件名自动配对（如 `IMG_1234.HEIC` + `IMG_1234.MOV`），选择顺序无关
   - **存储**：Video 表新增 `livePhotoVideos` 字段（JSON 数组，与 imageUrls 一一对应，`""` 表示静态图），实况视频段以 video 类型上传 OSS
   - **播放**：轮播到实况图自动静音播放视频，对应进度条一节显示视频实时进度（timeupdate 驱动，非倒计时）；视频完整播完后再切下一张，融入轮播节奏；背景音乐保持正常播放（仅视频静音）
+  - **播放阶段机**：实况图播放流程为 `static-preview（1s封面）→ live-fade-in（交叉淡化）→ 视频播放 → live-fade-out（交叉淡化）→ static-preview（1s封面）→ 循环`。用链式定时器 + epoch 守卫推进；单图 loop 用 `liveRestartTick` 信号触发重播（currentIndex 不变时 React 不重渲染）；实况结束用 React 原生 `onEnded` 绑定
+  - **渲染实现（单 canvas 像素级混合）**：真 `<video>` `opacity:0` + `absolute inset-0` 隐藏仅作帧源（继续硬件解码、驱动 `onEnded`/进度条/首帧），新增 `<canvas>` `absolute inset-0` 用 `requestAnimationFrame` 逐帧 `drawImage` 镜像视频；同一画布里用 `globalAlpha` 同时绘制「封面帧（`1-fade`）+ 实况帧（`fade`）」实现像素级半透明交叉淡化，不依赖任何元素层叠关系。封面 `<img>` 常驻渲染并置于 canvas 下方（`z-11` < canvas `z-12`），作为 canvas 首帧绘制前的无缝底衬（消除淡入空档闪烁）；封面帧用 `Image` 对象绘制（同 URL 走缓存），`drawImage` 按 `object-contain` 等比缩放居中（`Math.min`）。淡入淡出用 `easeInOutQuad` 缓动（`liveFadeRef` + `fadeAnimRef`），首帧 `loadeddata` 后再淡入、1.5s 兜底防卡死
+  - **暂停保留进度原地暂停** — 实况播放中暂停不再跳回封面：阶段机暂停分支 `video.pause()` 原地冻结画面与进度，恢复时从当前位置续播（恰好在播完淡出时刻暂停则重新淡入从头播）；独立播放 effect 加 `isPlaying` 守卫，元数据/进度监听拆独立 effect 驱动
   - **时长分配**：自动模式下静态图时长 = `(总音频时长 - 实况视频总时长) / 静态图数`，实况图 = 视频完整时长，避免有的长有的短
   - **封面**：实况只能用静态帧（图片本身）做封面，不提供动图封面
   - **编辑**：编辑页图片排序/删除时 livePhotoVideos 同步，保存时一并提交
@@ -587,7 +602,7 @@ sudo firewall-cmd --reload
 - **图文左右切换按钮修复** — 按钮加 `z-30`（原被主图 `z-10` 盖住导致点击失效，用控制台 `elementFromPoint` 诊断确认）；hover 时背景蒙版加深 40%（`bg-black/50→90`）
 - **图文进度条增强** — 每节从 `<div>` 改为 `<button>`，点击跳转到对应图片；悬停加粗 `3px→9px`（中线对称扩展，80ms 过渡）
 - **图文控制栏空白点击修复** — 控制栏加 `data-controlbar` 标记，点击控制栏空白只切换可见性，不触发播放/暂停
-- **图文音量控制** — 控制栏新增音量按钮（Volume2/Volume1/VolumeX 图标随音量变化），点击静音/取消静音，悬停弹出滑块调节背景音乐音量（渐变显示填充进度，注入 CSS 让 thumb 圆心对齐轨道中线，Tailwind 任意变体对 range 伪元素不可靠）
+- **图文音量控制** — 控制栏新增音量按钮（Volume2/Volume1/VolumeX 图标随音量变化），点击静音/取消静音，悬停弹出滑块调节背景音乐音量（渐变显示填充进度，注入 CSS 让 thumb 圆心对齐轨道中线，Tailwind 任意变体对 range 伪元素不可靠）；音量条悬停弹出 2s 自动隐藏（滑入滑块取消定时器保持显示），音量/静音状态按用户存数据库（User.volume/muted，`/api/user/volume`，滑块拖动 300ms 防抖）
 - **图文中心蒙版动画修复** — 中心指示器加 `z-40`（原无 z-index 被主图 `z-10` 盖住导致不显示，子代理调研确认根因）
 
 - **图片轮播触摸处理** — ImageCarousel 组件（`video-play-section.tsx`）使用与视频播放器一致的原生 `addEventListener` 方式处理触摸事件。React 合成 `onTouchStart` 默认注册为 passive listener，`preventDefault()` 会被浏览器忽略，因此必须使用原生 API + `{ capture: true, passive: false }` 才能阻断 click 事件合成。所有回调通过 ref 访问（`togglePlayRef`、`handleManualSwitchRef`、`currentIndexRef`、`imagesLengthRef`），useEffect 依赖数组为空，避免状态变化导致监听器重建丢失 `lastTap` 时间戳。PC 端 click 处理器始终绑定（不使用 `ontouchstart` 守卫），与视频播放器对齐——移动端通过 `touchstart.preventDefault()` 阻止合成 click，触摸屏笔记本的鼠标和触摸两种输入模式可共存。

@@ -11,13 +11,13 @@ const AuthModal = dynamic(() => import("@/components/auth/auth-modal").then((m) 
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <ThemeProvider>
-      <SessionProvider>
+    <SessionProvider>
+      <ThemeProvider>
         <AuthModalProvider>
           {children}
           <AuthModal />
         </AuthModalProvider>
-      </SessionProvider>
-    </ThemeProvider>
+      </ThemeProvider>
+    </SessionProvider>
   );
 }

@@ -10,6 +10,8 @@ import VideoFavoriteButton from "@/components/video/video-favorite-button";
 import VideoDeleteButton from "@/components/video/video-delete-button";
 import { Pencil, Repeat, Play, SkipForward, Volume2, Volume1, VolumeX } from "lucide-react";
 import { type PlayMode, MODES, fetchPlayMode, updatePlayMode } from "@/lib/play-mode";
+import { fetchVolume, updateVolume, getSavedVolume } from "@/lib/volume";
+import { toHttps } from "@/lib/image";
 
 interface VideoInfo {
   id: string;
@@ -70,11 +72,11 @@ function videoReducer(state: VideoState, action: VideoAction): VideoState {
 }
 
 // Image carousel for image_text posts
-const CAROUSEL_VARIANTS = {
-  enter: (dir: number) => ({ opacity: 0, x: dir * 100 }),
-  center: { opacity: 1, x: 0 },
-  exit: (dir: number) => ({ opacity: 0, x: dir * -100 }),
-};
+
+// 实况照片过渡：先预览 1s 封面帧 → 封面淡出/实况淡入交叉过渡 → 实况完整播放
+// → 实况淡出/封面淡入交叉过渡 → 封面再预览 1s → 继续轮播下一张
+const LIVE_PREVIEW_MS = 1000; // 封面帧预览时长
+const LIVE_FADE_MS = 0.8; // 封面/实况交叉淡化时长
 
 function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, playMode, userId, onNext }: { imageUrls: string[]; livePhotoVideos?: string[] | null; musicUrls?: string[] | null; imageDuration?: number | null; playMode: PlayMode; userId?: string | null; onNext?: () => void }) {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -88,8 +90,9 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
   const userIdRef = useRef(userId);
   useEffect(() => { userIdRef.current = userId; }, [userId]);
   useEffect(() => { fetchPlayMode(userId).then(setMode); }, [userId]);
-  const [volume, setVolume] = useState(1);
-  const [muted, setMuted] = useState(false);
+  useEffect(() => { fetchVolume(userId).then(s => { setVolume(s.volume); setMuted(s.muted); }); }, [userId]);
+  const [volume, setVolume] = useState(() => getSavedVolume(userId).volume);
+  const [muted, setMuted] = useState(() => getSavedVolume(userId).muted);
   const [showVolume, setShowVolume] = useState(false);
   const [showModeTooltip, setShowModeTooltip] = useState(false);
   const [showControls, setShowControls] = useState(() => {
@@ -104,6 +107,7 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
   const audioRef = useRef<HTMLAudioElement>(null);
   const audioUrlsRef = useRef<string[]>([]);
   const livePhotoVideoRef = useRef<HTMLVideoElement>(null);
+  const liveCanvasRef = useRef<HTMLCanvasElement>(null);
   const [needBlurBg, setNeedBlurBg] = useState(false);
   const autoPlayTimerRef = useRef<NodeJS.Timeout | null>(null);
   const indicatorTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -142,18 +146,20 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
     return () => ro.disconnect();
   }, [currentIndex]);
 
-  // Parse musicUrls
+  // Parse musicUrls（统一转 HTTPS，避免 HTTPS 页面加载 HTTP 资源被 Mixed Content 拦截）
   const audioUrls = useMemo(() => {
-    if (musicUrls && musicUrls.length > 0) return musicUrls;
+    if (musicUrls && musicUrls.length > 0) return musicUrls.map(toHttps);
     return [];
   }, [musicUrls]);
   audioUrlsRef.current = audioUrls;
 
-  const images = imageUrls.filter(url => url);
+  const images = imageUrls.filter(url => url).map(toHttps);
+  const imagesRef = useRef(images);
+  imagesRef.current = images;
   // livePhotoVideos is paired 1:1 with imageUrls (same index). Filter to match images indices.
   const liveVideos = useMemo(() => {
     if (!livePhotoVideos || !Array.isArray(livePhotoVideos)) return [];
-    return images.map((_, i) => livePhotoVideos[i] || "");
+    return images.map((_, i) => (livePhotoVideos[i] ? toHttps(livePhotoVideos[i]) : ""));
   }, [livePhotoVideos, images]);
   const liveVideosRef = useRef(liveVideos);
   liveVideosRef.current = liveVideos;
@@ -161,6 +167,69 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
   // Track each live photo video's duration (seconds) to balance auto-mode preview times
   const liveDurationsRef = useRef<number[]>([]);
   const [, setLiveDurationsTick] = useState(0);
+
+  // 实况照片阶段机：static-preview → live-fade-in（视频淡入并播放）→ live-fade-out → static-preview
+  // 仅当前图片是实况且正在播放时参与。静止图片不受影响。
+  // livePhase 用 useState 驱动渲染（视频/封面透明度），机器逻辑由下方 effect 的链式定时器推进。
+  const [livePhase, setLivePhase] = useState<"static-preview" | "live-fade-in" | "live-fade-out">("static-preview");
+  const liveTimersRef = useRef<{ fade: NodeJS.Timeout | null; preview: NodeJS.Timeout | null; reveal: NodeJS.Timeout | null }>({ fade: null, preview: null, reveal: null });
+  // 实况重播信号：当 advanceImage 要「回到当前实况图」（单图 loop）时递增，
+  // 使阶段机 effect 重新运行，实现实况的循环重播。currentIndex 不变时 React 不会重渲染。
+  const [liveRestartTick, setLiveRestartTick] = useState(0);
+  const livePhaseTickRef = useRef(0); // 每次阶段切换递增，定时器/视频回调用它判断是否仍然有效
+
+  // 交叉淡化控制：fade-in/out 时视频和封面同时渲染，CSS animation/transition 同时开始。
+  const [liveFadeVisible, setLiveFadeVisible] = useState(false);
+  const liveFadeTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  const clearLiveTimers = useCallback(() => {
+    const t = liveTimersRef.current;
+    if (t.fade) { clearTimeout(t.fade); t.fade = null; }
+    if (t.preview) { clearTimeout(t.preview); t.preview = null; }
+    if (t.reveal) { clearTimeout(t.reveal); t.reveal = null; }
+  }, []);
+
+  // 交叉淡化：fade-in 时挂载视频（display:none→渲染，CSS transition 0→1），
+  // fade-out 后等 CSS 过渡完成再卸载（避免封面闪烁）。
+  useEffect(() => {
+    if (liveFadeTimerRef.current) { clearTimeout(liveFadeTimerRef.current); liveFadeTimerRef.current = null; }
+
+    if (livePhase === "live-fade-out") {
+      // fade-out：延迟卸载视频（等 CSS opacity 过渡 0.3s 完成后再从 DOM 移除）
+      liveFadeTimerRef.current = setTimeout(() => {
+        setLiveFadeVisible(false);
+        liveFadeTimerRef.current = null;
+      }, LIVE_FADE_MS * 1000 + 50);
+    } else if (livePhase === "static-preview") {
+      // static-preview：立即卸载（视频 opacity 此时已是 0）
+      setLiveFadeVisible(false);
+    }
+
+    return () => {
+      if (liveFadeTimerRef.current) { clearTimeout(liveFadeTimerRef.current); liveFadeTimerRef.current = null; }
+    };
+  }, [livePhase]);
+
+  // 实况视频播放控制：当视频挂载且处于 live-fade-in 阶段时自动播放。
+  // 用独立 effect 确保不依赖 phase machine effect 的定时器调度。
+  // 暂停时不自动播放（恢复由阶段机的 liveFadeVisible 分支续播）。
+  useEffect(() => {
+    if (!currentLiveVideo || livePhase !== "live-fade-in" || !liveFadeVisible) return;
+    if (!isPlaying) return;
+    const v = livePhotoVideoRef.current;
+    if (!v) return;
+    v.muted = true;
+    v.play().catch(() => {});
+  }, [currentLiveVideo, livePhase, liveFadeVisible, isPlaying]);
+
+  // 手工切换图片时：重置实况阶段为封面帧预览，并清掉所有实况定时器
+  useEffect(() => {
+    if (userInteracted) {
+      clearLiveTimers();
+      livePhaseTickRef.current += 1;
+      setLivePhase("static-preview");
+    }
+  }, [userInteracted, clearLiveTimers]);
 
   // Calculate interval:
   // - Live photo images: the video's full duration (video-first, complete playback)
@@ -253,42 +322,235 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
     });
   }, [images.length, onNext]);
 
-  // Live photo video playback control:
-  // - When current image is a live photo and isPlaying, play the muted video, drive progress from timeupdate
-  // - On video 'ended', advance to next image (respecting play mode)
+  // 实况交叉淡化核心（单 canvas 方案）：
+  // 不再依赖封面 <img> 与 canvas 的层叠关系 —— Edge 下 opacity:0 的独立合成层仍会遮挡下方内容
+  // （封面 img 带 will-change:transform + backface-visibility 正是这种合成层，导致 canvas 被盖住）。
+  // 因此实况阶段封面 <img> 直接不渲染（彻底消除遮挡），改由 canvas 用 globalAlpha 在同一个画布里
+  // 逐帧混合「封面帧 + 实况视频帧」，实现真正的像素级半透明交叉淡化。
+  // 真 <video> 保持 opacity:0 隐藏（继续硬件解码、驱动 onEnded/进度），仅作为 canvas 的帧源。
+  const liveFadeRef = useRef(0); // 0=纯封面，1=纯实况
+  const fadeAnimRef = useRef<{ from: number; to: number; start: number; dur: number } | null>(null);
+
+  const startLiveFade = useCallback((to: number, durMs: number) => {
+    fadeAnimRef.current = { from: liveFadeRef.current, to, start: performance.now(), dur: durMs };
+  }, []);
+
+  // 实况播放结束：淡出实况、淡入封面帧（用 React onEnded 绑定，避免 effect 里 addEventListener 时机问题）
+  const handleLiveEnded = useCallback(() => {
+    startLiveFade(0, LIVE_FADE_MS * 1000);
+    setLivePhase("live-fade-out");
+    liveTimersRef.current.reveal = setTimeout(() => {
+      setLivePhase("static-preview");
+      liveTimersRef.current.preview = setTimeout(() => {
+        if (imagesRef.current.length <= 1) {
+          const curMode = modeRef.current;
+          if (curMode === "loop") {
+            setLiveRestartTick((n) => n + 1);
+            return;
+          }
+        }
+        advanceImage();
+      }, LIVE_PREVIEW_MS);
+    }, LIVE_FADE_MS * 1000);
+  }, [advanceImage, startLiveFade]);
+
+  // 实况照片阶段机：
+  //   static-preview  → (LIVE_PREVIEW_MS 后) → live-fade-in（视频淡入并播放）→ (视频 ended)
+  //   → live-fade-out → (LIVE_FADE_MS 后) → static-preview → (LIVE_PREVIEW_MS 后) → 切下一张
+  // 视频引用 currentLiveVideo，重挂载后走一遍完整阶段。
+  // 暂停不重置阶段机：原地暂停实况（保留进度与画面），恢复时从当前位置继续。
   useEffect(() => {
     const v = livePhotoVideoRef.current;
     if (!currentLiveVideo) {
       if (v) { v.pause(); v.currentTime = 0; }
       return;
     }
-    if (v && isPlaying && !userInteracted) {
-      v.muted = true;
-      const onLoaded = () => {
-        if (v.duration && isFinite(v.duration)) {
-          liveDurationsRef.current[currentIndex] = v.duration;
-          setLiveDurationsTick((n) => n + 1);
-        }
-      };
-      const onTime = () => {
-        if (v.duration && isFinite(v.duration)) {
-          setProgress(Math.min(100, (v.currentTime / v.duration) * 100));
-        }
-      };
-      const onEnded = () => { advanceImage(); };
-      v.addEventListener("loadedmetadata", onLoaded);
-      v.addEventListener("timeupdate", onTime);
-      v.addEventListener("ended", onEnded);
-      v.play().catch(() => {});
-      return () => {
-        v.removeEventListener("loadedmetadata", onLoaded);
-        v.removeEventListener("timeupdate", onTime);
-        v.removeEventListener("ended", onEnded);
-      };
-    } else if (v) {
-      v.pause();
+
+    // 手动切图：回到封面帧预览并停止所有实况播放
+    if (userInteracted) {
+      clearLiveTimers();
+      livePhaseTickRef.current += 1;
+      setLivePhase("static-preview");
+      if (v) { v.pause(); v.currentTime = 0; }
+      return;
     }
-  }, [currentLiveVideo, isPlaying, userInteracted, advanceImage, currentIndex]);
+
+    // 暂停：原地暂停实况，保留进度与画面（不回到封面、不重绕）
+    if (!isPlaying) {
+      clearLiveTimers(); // 阻止「播完→预览→切图」的定时器链在暂停期间推进
+      if (v && !v.paused) v.pause();
+      return;
+    }
+
+    // 从暂停恢复：实况已挂载 → 从当前位置继续播放，不走完整阶段机
+    if (liveFadeVisible) {
+      if (v) {
+        if (v.ended) {
+          // 恰好暂停在「播完淡出」时刻：重新淡入并从头播
+          v.currentTime = 0;
+          v.play().catch(() => {});
+          liveFadeRef.current = 0;
+          startLiveFade(1, LIVE_FADE_MS * 1000);
+          setLivePhase("live-fade-in");
+        } else if (v.paused) {
+          v.play().catch(() => {});
+        }
+      }
+      return;
+    }
+
+    // 进入 static-preview：封面帧先展示 LIVE_PREVIEW_MS，然后淡入实况
+    // epoch 在重置时递增，用于守卫定时器回调。
+    setLivePhase("static-preview");
+    livePhaseTickRef.current += 1;
+    const epoch = livePhaseTickRef.current;
+
+    // ★ fade timer：1s 封面预览后触发交叉淡入。
+    //   无论 video ref 是否就绪，都先创建此定时器，防止首次渲染 v=null 时定时器链断裂。
+    liveTimersRef.current.fade = setTimeout(() => {
+      if (livePhaseTickRef.current !== epoch) return;
+      // 挂载隐藏视频（仅作 canvas 帧源），首帧就绪后由帧镜像 effect 触发 live-fade-in 交叉淡化
+      setLiveFadeVisible(true);
+      liveTimersRef.current.fade = null;
+    }, LIVE_PREVIEW_MS);
+
+    // 若 video ref 不可读，跳过（等 liveFadeVisible 变 true 后元数据 effect 挂监听）
+    if (!v) {
+      return () => {
+        clearLiveTimers();
+        if (liveFadeTimerRef.current) { clearTimeout(liveFadeTimerRef.current); liveFadeTimerRef.current = null; }
+      };
+    }
+
+    if (v) { v.currentTime = 0; }
+    (v as HTMLVideoElement).muted = true;
+
+    return () => {
+      clearLiveTimers();
+      if (liveFadeTimerRef.current) { clearTimeout(liveFadeTimerRef.current); liveFadeTimerRef.current = null; }
+    };
+  }, [currentLiveVideo, isPlaying, userInteracted, currentIndex, advanceImage, clearLiveTimers, liveRestartTick, startLiveFade]);
+
+  // 实况视频元数据与进度监听（独立于阶段机，暂停/恢复后依然驱动进度条与时长分配）
+  useEffect(() => {
+    if (!currentLiveVideo || !liveFadeVisible) return;
+    const v = livePhotoVideoRef.current;
+    if (!v) return;
+    const onLoaded = () => {
+      if (v.duration && isFinite(v.duration)) {
+        liveDurationsRef.current[currentIndex] = v.duration;
+        setLiveDurationsTick((n) => n + 1);
+      }
+    };
+    const onTime = () => {
+      if (v.duration && isFinite(v.duration)) {
+        setProgress(Math.min(100, (v.currentTime / v.duration) * 100));
+      }
+    };
+    v.addEventListener("loadedmetadata", onLoaded);
+    v.addEventListener("timeupdate", onTime);
+    return () => {
+      v.removeEventListener("loadedmetadata", onLoaded);
+      v.removeEventListener("timeupdate", onTime);
+    };
+  }, [currentLiveVideo, liveFadeVisible, currentIndex]);
+
+  // 封面帧的 canvas 绘制用 Image（与 DOM 封面 img 同 URL，走浏览器缓存）
+  const coverCanvasImgRef = useRef<HTMLImageElement | null>(null);
+  const currentCoverUrl = images[currentIndex];
+  useEffect(() => {
+    const img = new Image();
+    img.decoding = "async";
+    img.src = currentCoverUrl;
+    coverCanvasImgRef.current = img;
+    return () => { coverCanvasImgRef.current = null; };
+  }, [currentCoverUrl]);
+
+  useEffect(() => {
+    if (!currentLiveVideo || !liveFadeVisible) return;
+    const v = livePhotoVideoRef.current;
+    const canvas = liveCanvasRef.current;
+    if (!v || !canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let raf = 0;
+    let fadedIn = false;
+    let fallback: NodeJS.Timeout | null = null;
+
+    // 按 object-contain 等比缩放居中绘制（与封面 img 的 object-contain 一致，避免裁切）
+    const drawContain = (src: CanvasImageSource, w: number, h: number) => {
+      const sv = src as HTMLVideoElement;
+      const si = src as HTMLImageElement;
+      const sw = sv.videoWidth || si.naturalWidth || 0;
+      const sh = sv.videoHeight || si.naturalHeight || 0;
+      if (!sw || !sh) return;
+      const scale = Math.min(w / sw, h / sh);
+      const dw = sw * scale;
+      const dh = sh * scale;
+      ctx.drawImage(src, (w - dw) / 2, (h - dh) / 2, dw, dh);
+    };
+
+    const paint = () => {
+      const w = canvas.clientWidth || 0;
+      const h = canvas.clientHeight || 0;
+      if (w === 0 || h === 0) return;
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+      }
+      ctx.clearRect(0, 0, w, h);
+      const fade = liveFadeRef.current;
+      const ci = coverCanvasImgRef.current;
+      if (fade < 1 && ci && ci.complete && ci.naturalWidth > 0) {
+        ctx.globalAlpha = 1 - fade;
+        drawContain(ci, w, h);
+      }
+      if (fade > 0 && v.videoWidth > 0 && v.videoHeight > 0) {
+        ctx.globalAlpha = fade;
+        drawContain(v, w, h);
+      }
+      ctx.globalAlpha = 1;
+    };
+
+    const tick = (now: number) => {
+      const anim = fadeAnimRef.current;
+      if (anim) {
+        const t = Math.min(1, Math.max(0, (now - anim.start) / anim.dur));
+        const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        liveFadeRef.current = anim.from + (anim.to - anim.from) * eased;
+        if (t >= 1) fadeAnimRef.current = null;
+      }
+      paint();
+      raf = requestAnimationFrame(tick);
+    };
+
+    // 首帧就绪：先停留在封面（fade=0），再开始 0→1 淡入，避免淡入时 canvas 还是空的
+    const onFrameReady = () => {
+      if (fadedIn) return;
+      fadedIn = true;
+      if (fallback) { clearTimeout(fallback); fallback = null; }
+      liveFadeRef.current = 0;
+      startLiveFade(1, LIVE_FADE_MS * 1000);
+      setLivePhase((prev) => (prev === "static-preview" ? "live-fade-in" : prev));
+    };
+
+    v.addEventListener("loadeddata", onFrameReady);
+    if (v.readyState >= 2) onFrameReady();
+
+    // 兜底：若视频首帧迟迟未就绪，1.5s 后仍强制淡入，避免轮播卡死
+    fallback = setTimeout(() => {
+      if (!fadedIn) onFrameReady();
+    }, 1500);
+
+    raf = requestAnimationFrame(tick);
+
+    return () => {
+      v.removeEventListener("loadeddata", onFrameReady);
+      cancelAnimationFrame(raf);
+      if (fallback) clearTimeout(fallback);
+    };
+  }, [currentLiveVideo, liveFadeVisible, currentIndex, liveRestartTick, startLiveFade]);
 
   // Auto-play timer with smooth progress animation (static images only; live photo uses video timeupdate)
   useEffect(() => {
@@ -368,11 +630,11 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
         if (audioRef.current) audioRef.current.pause();
         showTempIndicator("play");
       } else {
-        livePhotoVideoRef.current?.play().catch(() => {});
         if (audioRef.current) audioRef.current.play().catch(() => {});
         showTempIndicator("pause");
       }
       setIsPlaying(!isPlaying);
+      // 从暂停恢复：由阶段机 liveFadeVisible 分支原地续播实况（不回到封面）
     } else if (audioRef.current) {
       if (isPlaying) {
         audioRef.current.pause();
@@ -411,13 +673,39 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
   }, [volume, muted]);
 
   const toggleMute = useCallback(() => {
-    setMuted(prev => !prev);
-  }, []);
+    setMuted(prev => {
+      const next = !prev;
+      updateVolume({ volume, muted: next }, userIdRef.current);
+      return next;
+    });
+  }, [volume]);
 
   const handleVolumeChange = useCallback((v: number) => {
     setVolume(v);
+    const nextMuted = v > 0 && muted ? false : muted;
     if (v > 0 && muted) setMuted(false);
+    // 拖动滑块时连续触发，防抖 300ms 后再持久化，避免频繁请求
+    if (volumePersistTimerRef.current) clearTimeout(volumePersistTimerRef.current);
+    volumePersistTimerRef.current = setTimeout(() => {
+      updateVolume({ volume: v, muted: nextMuted }, userIdRef.current);
+    }, 300);
   }, [muted]);
+
+  // 音量条自动隐藏：悬停音量图标时显示并启动 2s 定时器（鼠标不滑入滑块则自动消失）；
+  // 鼠标滑入滑块后取消定时器（交互期间保持显示），移出滑块立即隐藏。
+  // 控制栏 group-hover 隐藏仍生效：滑块随控制栏一起淡出。
+  const volumeTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const volumePersistTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const showVolumeTemporarily = useCallback(() => {
+    setShowVolume(true);
+    if (volumeTimerRef.current) clearTimeout(volumeTimerRef.current);
+    volumeTimerRef.current = setTimeout(() => setShowVolume(false), 2000);
+  }, []);
+  const keepVolumeVisible = useCallback(() => {
+    if (volumeTimerRef.current) { clearTimeout(volumeTimerRef.current); volumeTimerRef.current = null; }
+    setShowVolume(true);
+  }, []);
+  useEffect(() => () => { if (volumeTimerRef.current) clearTimeout(volumeTimerRef.current); if (volumePersistTimerRef.current) clearTimeout(volumePersistTimerRef.current); }, []);
 
   // 音量滑块样式：thumb 圆点相对轨道中线对齐（Tailwind 任意变体对 range 伪元素不可靠，用注入 CSS）
   useEffect(() => {
@@ -650,6 +938,8 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
     <div
       ref={containerRef}
       className="relative h-full w-full bg-black group"
+      data-live-phase={livePhase}
+      data-live-visible={liveFadeVisible}
     >
       {audioUrls.length > 0 && (
         <audio
@@ -661,7 +951,11 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
         />
       )}
 
-      {currentLiveVideo && (
+      {/* 实况视频：仅在交叉淡化阶段渲染，opacity:0 隐藏，仅作为 canvas 的帧源。
+           GPU 把 <video> 当独立合成平面，不参与和 HTML 层的逐像素 alpha 混合，
+           Edge 下即使 opacity:0 的合成层也会遮挡下方内容，因此视频不直接显示，
+           由下方 opaque 的 canvas 完全盖住它；视频仅负责解码、驱动 onEnded/进度/首帧。 */}
+      {currentLiveVideo && liveFadeVisible && (
         <video
           ref={livePhotoVideoRef}
           src={currentLiveVideo}
@@ -669,7 +963,23 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
           playsInline
           loop={false}
           preload="auto"
-          className="relative z-10 h-full w-full object-contain"
+          onEnded={handleLiveEnded}
+          className="pointer-events-none absolute inset-0 z-10 opacity-0"
+          data-live-phase={livePhase}
+          aria-hidden
+        />
+      )}
+
+      {/* 实况交叉淡化 canvas（单 canvas 方案）：
+           同一画布里用 globalAlpha 逐帧混合「封面帧 + 实况视频帧」。
+           canvas 置于封面 <img> 上方（z-[12] > z-[11]），实况阶段由 canvas 完全覆盖封面；
+           封面 <img> 常驻在下层，作为「canvas 首帧绘制前的无缝底衬」，消除淡入时的空档闪烁。 */}
+      {currentLiveVideo && liveFadeVisible && (
+        <canvas
+          ref={liveCanvasRef}
+          className="absolute inset-0 z-[12] h-full w-full"
+          style={{ pointerEvents: "none" }}
+          data-live-phase={livePhase}
         />
       )}
 
@@ -690,44 +1000,41 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
               src={images[currentIndex]}
               alt=""
               className="h-full w-full scale-110 object-cover opacity-100 blur-[60px] brightness-[0.9] saturate-[1.15]"
-              loading="lazy"
               decoding="async"
             />
           </motion.div>
         )}
       </AnimatePresence>
 
-      <AnimatePresence mode="wait" custom={dirRef.current}>
-        <motion.img
-          key={`img-${currentIndex}`}
-          src={images[currentIndex]}
-          alt={`Image ${currentIndex + 1}`}
-          custom={dirRef.current}
-          variants={CAROUSEL_VARIANTS}
-          initial="enter"
-          animate="center"
-          exit="exit"
-          transition={{ duration: 0.2 }}
-          onLoad={(e) => {
-            const img = e.currentTarget;
-            if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-              curImageRatioRef.current = img.naturalWidth / img.naturalHeight;
-              // 触发容器内比例检查
-              const container = containerRef.current;
-              if (container) {
-                const cw = container.clientWidth;
-                const ch = container.clientHeight;
-                const ratio = curImageRatioRef.current;
-                const containerAspect = cw / ch;
-                const diff = Math.abs(ratio - containerAspect) / Math.max(ratio, containerAspect);
-                setNeedBlurBg(diff > 0.05);
-              }
+      {/* 主图片：静态封面帧，常驻渲染（实况阶段也保留）。
+           置于 canvas 下方（z-[11] < canvas z-[12]）：
+           - 非实况阶段：封面直接显示
+           - 实况阶段：canvas 在上方绘制封面帧+实况帧的交叉淡化，完全覆盖封面；
+             封面 img 作为 canvas 首帧绘制前的无缝底衬，避免「封面消失 → canvas 未画」
+             的空档闪烁；且 Edge 对 opacity:0 合成层的遮挡问题不影响（封面在下层被覆盖） */}
+      <img
+        key={`img-${currentIndex}`}
+        src={images[currentIndex]}
+        alt={`Image ${currentIndex + 1}`}
+        onLoad={(e) => {
+          const img = e.currentTarget;
+          if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+            curImageRatioRef.current = img.naturalWidth / img.naturalHeight;
+            // 触发容器内比例检查
+            const container = containerRef.current;
+            if (container) {
+              const cw = container.clientWidth;
+              const ch = container.clientHeight;
+              const ratio = curImageRatioRef.current;
+              const containerAspect = cw / ch;
+              const diff = Math.abs(ratio - containerAspect) / Math.max(ratio, containerAspect);
+              setNeedBlurBg(diff > 0.05);
             }
-          }}
-          className={`relative z-10 h-full w-full object-contain ${currentLiveVideo ? "opacity-0" : ""}`}
-          draggable={false}
-        />
-      </AnimatePresence>
+          }
+        }}
+        className="absolute inset-0 z-[11] h-full w-full object-contain"
+        draggable={false}
+      />
 
       {/* Center play/pause indicator - elastic animation like video player */}
       <AnimatePresence>
@@ -837,7 +1144,7 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); toggleMute(); }}
-                onMouseEnter={() => setShowVolume(true)}
+                onMouseEnter={showVolumeTemporarily}
                 className="text-white hover:text-[#FB7299]"
                 title={muted ? "取消静音" : "静音"}
               >
@@ -849,10 +1156,10 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
                   <Volume2 className="h-5 w-5" />
                 )}
               </button>
-              {/* Volume slider on hover — 滑块属于 hover 区域，鼠标移入不消失，移出才隐藏 */}
+              {/* Volume slider on hover — 悬停图标显示（2s 后自动消失），滑入滑块取消定时器保持显示，移出滑块立即隐藏 */}
               <div
-                onMouseEnter={() => setShowVolume(true)}
-                onMouseLeave={() => setShowVolume(false)}
+                onMouseEnter={keepVolumeVisible}
+                onMouseLeave={() => { setShowVolume(false); if (volumeTimerRef.current) { clearTimeout(volumeTimerRef.current); volumeTimerRef.current = null; } }}
                 className={`absolute bottom-full right-0 mb-2 flex-col items-center gap-1 rounded-md bg-black/80 px-2 py-2 transition-opacity duration-200 ${
                   showVolume ? "flex opacity-100" : "pointer-events-none flex opacity-0"
                 }`}
