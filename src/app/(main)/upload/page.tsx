@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { useAuthModal } from "@/components/auth/auth-modal-context";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CompressDialog } from "@/components/ui/compress-dialog";
 import { compressImage, needsCompression, formatFileSize } from "@/lib/image-compress";
 import { compressMusic, needsMusicCompression } from "@/lib/music-compress";
@@ -60,6 +61,8 @@ export default function UploadPage() {
   const [imageDuration, setImageDuration] = useState<number | null>(5);
   const [compressDialogOpen, setCompressDialogOpen] = useState(false);
   const [compressTarget, setCompressTarget] = useState<{ file: File; type: "image" | "music" } | null>(null);
+  // 图文投稿中选择了超时长视频的提示框
+  const [videoTooLongDialog, setVideoTooLongDialog] = useState<{ file: File; durationSeconds: number } | null>(null);
 
   // Cleanup image and music previews on unmount
   useEffect(() => {
@@ -173,6 +176,19 @@ export default function UploadPage() {
 
     setCompressDialogOpen(false);
     setCompressTarget(null);
+  };
+
+  // 图文投稿中选择了超过时长限制的视频：跳转到视频投稿并填入该视频
+  const handleVideoTooLongJump = (file: File, durationSeconds: number) => {
+    setVideoTooLongDialog({ file, durationSeconds });
+  };
+
+  const confirmVideoTooLongJump = () => {
+    if (!videoTooLongDialog) return;
+    setVideoTooLongDialog(null);
+    setActiveTab("video");
+    setFile(videoTooLongDialog.file);
+    if (!title.trim()) setTitle(videoTooLongDialog.file.name.replace(/\.[^.]+$/, ""));
   };
 
   if (status === "loading") {
@@ -548,6 +564,7 @@ export default function UploadPage() {
               // Directly call handleSubmit
               handleSubmit({ preventDefault: () => {} } as React.FormEvent);
             }}
+            onVideoTooLong={handleVideoTooLongJump}
           />
         )}
       </form>
@@ -563,6 +580,20 @@ export default function UploadPage() {
           setCompressDialogOpen(false);
           setCompressTarget(null);
         }}
+      />
+
+      <ConfirmDialog
+        open={!!videoTooLongDialog}
+        title="视频时长超出图文投稿限制"
+        message={
+          videoTooLongDialog
+            ? `「${videoTooLongDialog.file.name}」时长约 ${videoTooLongDialog.durationSeconds} 秒。图文投稿中的实况视频最长 4 秒，较长视频请前往视频投稿。`
+            : ""
+        }
+        confirmText="前往视频投稿"
+        cancelText="确定"
+        onConfirm={confirmVideoTooLongJump}
+        onCancel={() => setVideoTooLongDialog(null)}
       />
     </motion.div>
   );

@@ -29,6 +29,101 @@ interface ImageTextUploadPageProps {
   uploadProgress: number;
   uploadStatus: string;
   onSubmit: (coverIndex: number) => void;
+  // 用户在图文中选择了超过时长限制的视频时触发（由父组件决定是否跳转视频投稿）
+  onVideoTooLong?: (file: File, durationSeconds: number) => void;
+}
+
+// 实况照片预览：默认显示封面帧 + 播放按钮，点击后静音循环播放视频
+function LivePhotoPreview({ video, poster, className }: { video: File; poster: string; className?: string }) {
+  // 播放状态：idle（封面帧）/ playing（播放中）/ ended（播完停在末帧）
+  const [state, setState] = useState<"idle" | "playing" | "ended">("idle");
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [videoUrl, setVideoUrl] = useState("");
+
+  useEffect(() => {
+    const url = URL.createObjectURL(video);
+    setVideoUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [video]);
+
+  useEffect(() => {
+    setState("idle");
+    const v = videoRef.current;
+    if (v) {
+      v.pause();
+      v.currentTime = 0;
+    }
+  }, [videoUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (videoRef.current) videoRef.current.pause();
+    };
+  }, []);
+
+  const handleToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const v = videoRef.current;
+    if (!v) return;
+    if (state === "playing") {
+      v.pause();
+      setState("ended");
+    } else {
+      // 重播：从头开始
+      v.currentTime = 0;
+      v.play().catch(() => setState("idle"));
+      setState("playing");
+    }
+  };
+
+  const handleEnded = () => {
+    setState("ended");
+  };
+
+  const showVideo = state === "playing" || state === "ended";
+  const showPoster = state === "idle";
+
+  // 封面帧作为相对定位元素撑起容器高度；视频与按钮绝对定位覆盖其上
+  return (
+    <div className="relative">
+      <img
+        src={poster}
+        alt="实况封面"
+        className={`${className || "h-full w-full object-contain"} block`}
+      />
+      {videoUrl && (
+        <video
+          ref={videoRef}
+          src={videoUrl}
+          poster={poster}
+          muted
+          playsInline
+          onEnded={handleEnded}
+          className={`absolute inset-0 h-full w-full object-contain ${showVideo ? "" : "opacity-0"}`}
+          onClick={handleToggle}
+        />
+      )}
+      <button
+        type="button"
+        onClick={handleToggle}
+        title={state === "playing" ? "暂停实况预览" : "播放实况预览"}
+        className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full text-white backdrop-blur-sm transition-all ${
+          showPoster ? "bg-black/50 p-2 hover:bg-black/70" : "bg-black/40 p-1.5 hover:bg-black/60"
+        }`}
+      >
+        {state === "playing" ? (
+          <svg className="h-4 w-4 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        ) : (
+          <svg className="h-4 w-4 sm:h-6 sm:w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        )}
+      </button>
+    </div>
+  );
 }
 
 export function ImageTextUploadPage({
@@ -46,6 +141,7 @@ export function ImageTextUploadPage({
   uploadProgress,
   uploadStatus,
   onSubmit,
+  onVideoTooLong,
 }: ImageTextUploadPageProps) {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [editMode, setEditMode] = useState(false);
@@ -64,14 +160,13 @@ export function ImageTextUploadPage({
 
   const MAX_IMAGES = 40;
   const MAX_AUDIO = 3;
+  // 图文投稿允许的实况视频最大时长（秒），超过则建议前往视频投稿
+  const MAX_LIVE_VIDEO_SECONDS = 4;
 
-  // Cleanup previews on unmount
-  useEffect(() => {
-    return () => {
-      images.forEach((img) => URL.revokeObjectURL(img.preview));
-      music.forEach((m) => URL.revokeObjectURL(m.preview));
-    };
-  }, []);
+  // 注意：不在此处 revoke preview URL。
+  // preview URL 由父组件（upload/page.tsx）持有，切换「视频投稿/图文投稿」标签会导致本组件卸载重挂，
+  // 若在此卸载时 revoke，切回图文后图片预览将因 URL 失效而丢失。
+  // 图片/音乐的真实删除与编辑撤销逻辑中已各自 revoke，页面整体卸载时浏览器自动释放。
 
   // Image selection — supports live photos (Motion Photo / .livp / HEIC+MOV pairing)
   const handleImagesSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -86,28 +181,96 @@ export function ImageTextUploadPage({
 
     const filesToProcess = Array.from(files).slice(0, remaining);
 
+    // 动态导入实况处理工具（模块顶层含浏览器专用对象，避免 SSR 问题）
+    const livePhotoLib = await import("@/lib/live-photo");
+
+    // 检测并处理选中视频文件（无同名图片配对时视为「实况视频」）：
+    // 视频作为实况预览，需在 4 秒以内，超出时长则提醒用户前往视频投稿。
+    const videoFiles = filesToProcess.filter((f) => f.type.startsWith("video/"));
+    if (videoFiles.length > 0) {
+      // 有图片配对（如 Apple HEIC+MOV）时交给 processImageFiles 处理
+      const hasPairedImages = filesToProcess.some((f) => f.type.startsWith("image/"));
+      if (!hasPairedImages) {
+        // 纯视频：校验时长后作为实况照片加入
+        for (const vf of videoFiles) {
+          const duration = await livePhotoLib.readVideoDuration(vf);
+          if (duration !== null && duration > MAX_LIVE_VIDEO_SECONDS) {
+            onVideoTooLong?.(vf, Math.round(duration));
+            continue; // 忽略该视频，不加入图片列表
+          }
+          await addLivePhotoVideo(vf, livePhotoLib);
+        }
+        return;
+      }
+    }
+
     // Detect live photos (livp / HEIC / image+video pairs). If found, process asynchronously
     // (this bypasses the plain-image compression path since it handles HEIC → JPEG itself).
     try {
-      const { needsLivePhotoProcessing, processImageFiles } = await import("@/lib/live-photo");
+      const { needsLivePhotoProcessing, processImageFiles } = livePhotoLib;
       if (needsLivePhotoProcessing(filesToProcess)) {
         const processed = await processImageFiles(filesToProcess);
         if (processed.length > 0) {
-          setImages((prev) => [...prev, ...processed]);
+          // 校验配对视频的时长：超限时忽略该实况视频，仅保留静态图
+          const final: ImageItem[] = [];
+          let tooLongNotified = false;
+          for (const item of processed) {
+            if (item.livePhotoVideo) {
+              const duration = await livePhotoLib.readVideoDuration(item.livePhotoVideo);
+              if (duration !== null && duration > MAX_LIVE_VIDEO_SECONDS) {
+                if (!tooLongNotified) {
+                  tooLongNotified = true;
+                  onVideoTooLong?.(item.livePhotoVideo, Math.round(duration));
+                }
+                final.push({ file: item.file, preview: item.preview, livePhotoVideo: null });
+                continue;
+              }
+            }
+            final.push(item);
+          }
+          setImages((prev) => [...prev, ...final]);
           return;
         }
       }
-    } catch {
-      // Fall through to legacy handling if processing fails
+    } catch (err) {
+      // 实况处理失败：不静默丢弃，记录错误并让视频走独立实况路径
+      console.error("[image-text-upload] processImageFiles failed:", err);
     }
 
+    // 剩余文件：图片作为静态图加入；未配对的视频校验时长后作为实况照片加入
     for (const file of filesToProcess) {
+      if (file.type.startsWith("video/")) {
+        // 视频走独立实况路径（提取封面帧 + 校验时长）
+        const duration = await livePhotoLib.readVideoDuration(file);
+        if (duration !== null && duration > MAX_LIVE_VIDEO_SECONDS) {
+          onVideoTooLong?.(file, Math.round(duration));
+          continue;
+        }
+        await addLivePhotoVideo(file, livePhotoLib);
+        continue;
+      }
       if (needsCompression(file)) {
         setCompressTarget(file);
         setCompressDialogOpen(true);
         return;
       }
       addImage(file);
+    }
+  };
+
+  // 将视频作为实况照片加入：提取封面帧作为静态预览，视频作为 livePhotoVideo
+  const addLivePhotoVideo = async (videoFile: File, livePhotoLib: typeof import("@/lib/live-photo")) => {
+    const cover = await livePhotoLib.extractVideoCover(videoFile, 0);
+    if (cover) {
+      // cover 是 blob URL，无法直接转回 File；用 fetch 取回 blob 构造文件，preview 直接复用该 URL
+      const blob = await (await fetch(cover)).blob();
+      setImages((prev) => [
+        ...prev,
+        { file: new File([blob], videoFile.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" }), preview: cover, livePhotoVideo: videoFile },
+      ]);
+    } else {
+      // 提取封面帧失败：跳过，避免出现损坏图片
+      alert("无法读取该视频，已跳过");
     }
   };
 
@@ -331,16 +494,32 @@ export function ImageTextUploadPage({
           >
             <AnimatePresence mode="wait">
               {images.length > 0 ? (
-                <motion.img
-                  key={currentImageIndex}
-                  src={images[currentImageIndex]?.preview}
-                  alt={`Image ${currentImageIndex + 1}`}
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  transition={{ duration: 0.2 }}
-                  className="h-full w-full object-contain"
-                />
+                images[currentImageIndex]?.livePhotoVideo ? (
+                  <motion.div
+                    key={currentImageIndex}
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ duration: 0.2 }}
+                    className="h-full w-full"
+                  >
+                    <LivePhotoPreview
+                      video={images[currentImageIndex].livePhotoVideo!}
+                      poster={images[currentImageIndex].preview}
+                    />
+                  </motion.div>
+                ) : (
+                  <motion.img
+                    key={currentImageIndex}
+                    src={images[currentImageIndex]?.preview}
+                    alt={`Image ${currentImageIndex + 1}`}
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ duration: 0.2 }}
+                    className="h-full w-full object-contain"
+                  />
+                )
               ) : (
                 <div className="flex h-full items-center justify-center text-zinc-400">
                   暂无预览
@@ -410,13 +589,18 @@ export function ImageTextUploadPage({
           <textarea
             ref={descRef}
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="添加描述（选填）"
+            onChange={(e) => {
+              const val = e.target.value;
+              if (val.length <= 1000) setDescription(val);
+            }}
+            placeholder="添加描述（选填，最多 1000 字）"
             rows={3}
+            maxLength={1000}
             className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"
           />
-          <div className="mt-1">
+          <div className="mt-1 flex items-center justify-between">
             <EmojiPicker onSelect={(emoji) => insertTextAtCursor(descRef, emoji)} />
+            <p className="text-xs text-zinc-400">{description.length}/1000</p>
           </div>
         </div>
 
@@ -476,7 +660,7 @@ export function ImageTextUploadPage({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
             点击或拖拽上传图片
-            <p className="mt-1 text-xs text-zinc-400">支持 JPG、PNG、GIF、WebP、HEIC、实况照片（.livp / Motion Photo），单张最大 15MB</p>
+            <p className="mt-1 text-xs text-zinc-400">支持 JPG、PNG、GIF、WebP、HEIC、实况照片（.livp / Motion Photo），单张最大 15MB；也可上传 ≤4 秒的短视频作为实况</p>
           </button>
         </div>
 

@@ -6,11 +6,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { optimizedCover } from "@/lib/image";
 import { setAutoPlayVideo } from "@/lib/signals";
-
-const AVATAR_COLORS = [
-  "bg-pink-500", "bg-violet-500", "bg-blue-500", "bg-cyan-500",
-  "bg-green-500", "bg-amber-500", "bg-red-500", "bg-indigo-500",
-];
+import { avatarColorFor } from "@/lib/avatar";
 
 interface UserProfile {
   id: string;
@@ -71,14 +67,7 @@ export default function UserPublicPage({ params }: { params: Promise<{ id: strin
     );
   }
 
-  const hash = (() => {
-    let h = 0;
-    for (let i = 0; i < profile.name.length; i++) {
-      h = profile.name.charCodeAt(i) + ((h << 5) - h);
-    }
-    return Math.abs(h);
-  })();
-  const avatarColor = AVATAR_COLORS[hash % AVATAR_COLORS.length];
+  const avatarColor = avatarColorFor(profile.name);
 
   return (
     <div className="mx-auto max-w-4xl px-2 py-4 sm:px-4 sm:py-6">

@@ -20,6 +20,7 @@ export function ImageLightbox({
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [swipeOffset, setSwipeOffset] = useState(0);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastTouchDistance = useRef<number>(0);
   const lastTouchCenter = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
@@ -132,7 +133,10 @@ export function ImageLightbox({
     setIsDragging(false);
   }, []);
 
-  // Touch handlers for pinch-to-zoom
+  // Touch handlers for pinch-to-zoom and swipe-to-switch
+  const touchSwipeStart = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const [isSwiping, setIsSwiping] = useState(false);
+
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (e.touches.length === 2) {
       const dx = e.touches[0].clientX - e.touches[1].clientX;
@@ -142,12 +146,17 @@ export function ImageLightbox({
         x: (e.touches[0].clientX + e.touches[1].clientX) / 2,
         y: (e.touches[0].clientY + e.touches[1].clientY) / 2,
       };
-    } else if (e.touches.length === 1 && scale > 1) {
-      setIsDragging(true);
-      setDragStart({
-        x: e.touches[0].clientX - position.x,
-        y: e.touches[0].clientY - position.y,
-      });
+    } else if (e.touches.length === 1) {
+      if (scale > 1) {
+        setIsDragging(true);
+        setDragStart({
+          x: e.touches[0].clientX - position.x,
+          y: e.touches[0].clientY - position.y,
+        });
+      } else {
+        touchSwipeStart.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        setIsSwiping(true);
+      }
     }
   }, [scale, position]);
 
@@ -160,18 +169,34 @@ export function ImageLightbox({
       const scaleChange = (distance - lastTouchDistance.current) * 0.01;
       setScale((s) => Math.min(Math.max(s + scaleChange, 0.5), 5));
       lastTouchDistance.current = distance;
-    } else if (e.touches.length === 1 && isDragging) {
-      setPosition({
-        x: e.touches[0].clientX - dragStart.x,
-        y: e.touches[0].clientY - dragStart.y,
-      });
+    } else if (e.touches.length === 1) {
+      if (isDragging) {
+        setPosition({
+          x: e.touches[0].clientX - dragStart.x,
+          y: e.touches[0].clientY - dragStart.y,
+        });
+      } else if (isSwiping && scale <= 1) {
+        const dx = e.touches[0].clientX - touchSwipeStart.current.x;
+        setSwipeOffset(dx);
+      }
     }
-  }, [isDragging, dragStart]);
+  }, [isDragging, dragStart, isSwiping, scale]);
 
   const handleTouchEnd = useCallback(() => {
     setIsDragging(false);
     lastTouchDistance.current = 0;
-  }, []);
+
+    if (isSwiping && scale <= 1) {
+      const threshold = 60;
+      if (swipeOffset < -threshold) {
+        goNext();
+      } else if (swipeOffset > threshold) {
+        goPrev();
+      }
+      setSwipeOffset(0);
+    }
+    setIsSwiping(false);
+  }, [isSwiping, swipeOffset, goNext, goPrev, scale]);
 
   // Double tap to toggle zoom
   const lastTap = useRef<number>(0);
@@ -319,9 +344,9 @@ export function ImageLightbox({
         transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
         className="pointer-events-auto relative"
         style={{
-          transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+          transform: `translate(${position.x + (scale <= 1 ? swipeOffset : 0)}px, ${position.y}px) scale(${scale})`,
           cursor: scale > 1 ? (isDragging ? "grabbing" : "grab") : "zoom-in",
-          transition: isDragging ? "none" : "transform 0.15s ease-out",
+          transition: isDragging || isSwiping ? "none" : "transform 0.15s ease-out",
         }}
         onClick={(e) => e.stopPropagation()}
         onMouseDown={handleMouseDown}

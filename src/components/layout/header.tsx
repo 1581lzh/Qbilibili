@@ -8,11 +8,7 @@ import { Search, Sun, Moon, X } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { useAuthModal } from "@/components/auth/auth-modal-context";
 import { motion, AnimatePresence } from "framer-motion";
-
-const AVATAR_COLORS = [
-  "bg-pink-500", "bg-violet-500", "bg-blue-500", "bg-cyan-500",
-  "bg-green-500", "bg-amber-500", "bg-red-500", "bg-indigo-500",
-];
+import { avatarColorFor } from "@/lib/avatar";
 
 const SEARCH_HISTORY_KEY = "bilibili_search_history";
 
@@ -197,15 +193,7 @@ export function Header() {
     saveSearchHistory([]);
   }, []);
 
-  const hash = (() => {
-    const name = session?.user?.name || "";
-    let h = 0;
-    for (let i = 0; i < name.length; i++) {
-      h = name.charCodeAt(i) + ((h << 5) - h);
-    }
-    return Math.abs(h);
-  })();
-  const avatarColor = AVATAR_COLORS[hash % AVATAR_COLORS.length];
+  const avatarColor = avatarColorFor(session?.user?.name || "");
 
   return (
     <header className="sticky top-0 z-50 border-b border-zinc-200 bg-white/80 dark:border-zinc-800 dark:bg-black/80">
@@ -328,7 +316,13 @@ export function Header() {
             <Search size={18} suppressHydrationWarning />
           </button>
           <button
-            onClick={() => setTheme(resolved === "dark" ? "light" : "dark")}
+            onClick={(e) => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              setTheme(resolved === "dark" ? "light" : "dark", {
+                x: rect.left + rect.width / 2,
+                y: rect.top + rect.height / 2,
+              });
+            }}
             className="flex h-8 w-8 items-center justify-center rounded-full text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
           >
             {resolved === "dark" ? <Sun size={18} suppressHydrationWarning /> : <Moon size={18} suppressHydrationWarning />}

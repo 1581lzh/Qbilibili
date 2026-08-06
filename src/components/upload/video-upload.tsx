@@ -165,13 +165,18 @@ export function VideoUploadPage({
           <textarea
             ref={descRef}
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="添加视频简介（选填）"
+            onChange={(e) => {
+              const val = e.target.value;
+              if (val.length <= 1000) setDescription(val);
+            }}
+            placeholder="添加视频简介（选填，最多 1000 字）"
             rows={4}
+            maxLength={1000}
             className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"
           />
-          <div className="mt-1">
+          <div className="mt-1 flex items-center justify-between">
             <EmojiPicker onSelect={(emoji) => insertTextAtCursor(descRef, emoji)} />
+            <p className="text-xs text-zinc-400">{description.length}/1000</p>
           </div>
         </div>
 

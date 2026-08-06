@@ -303,16 +303,19 @@ export default function EditVideoPage() {
             <textarea
               ref={descRef}
               value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              maxLength={2000}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val.length <= 1000) setDescription(val);
+              }}
+              maxLength={1000}
               rows={4}
               className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 focus:border-[#FB7299] focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
-              placeholder="请输入描述（可选）"
+              placeholder="请输入描述（可选，最多 1000 字）"
             />
             <div className="mt-1 flex items-center justify-between">
               <EmojiPicker onSelect={(emoji) => insertTextAtCursor(descRef, emoji)} />
               <div className="text-right text-xs text-zinc-400">
-                {description.length}/2000
+                {description.length}/1000
               </div>
             </div>
           </div>

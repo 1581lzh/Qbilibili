@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { optimizedCover } from "@/lib/image";
+import { avatarColorFor } from "@/lib/avatar";
 
 interface Stats {
   totalUsers: number;
@@ -371,7 +372,7 @@ export default function AdminPage() {
                     <div className="space-y-2">
                       {filteredUsers.map((u) => (
                         <div key={u.id} className="flex items-center gap-4 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800">
-                          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#FB7299] text-lg font-bold text-white">
+                          <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full text-lg font-bold text-white ${avatarColorFor(u.name)}`}>
                             {u.name[0]}
                           </div>
                           <div className="min-w-0 flex-1">

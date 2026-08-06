@@ -1,11 +1,12 @@
 @import "tailwindcss";
 @custom-variant dark (&:is(.dark *));
 
-.dark-transition,
-.dark-transition *,
-.dark-transition *::before,
-.dark-transition *::after {
-  transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease !important;
+/* 深浅色切换：背景由圆形遮罩扩散完成，之后文字/UI 颜色短暂渐变过渡 */
+.theme-text-fade,
+.theme-text-fade *,
+.theme-text-fade *::before,
+.theme-text-fade *::after {
+  transition: background-color 0.35s ease, color 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease, fill 0.35s ease, stroke 0.35s ease !important;
 }
 
 @keyframes comment-slide-in {
@@ -50,6 +51,47 @@
   border-radius: 3px;
 }
 .dark .scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #52525b;
+}
+
+/* 输入类元素（评论区 contentEditable、标题/简介 textarea、搜索框等）滚动条适配深色模式 */
+textarea,
+input,
+[contenteditable="true"] {
+  scrollbar-width: thin;
+  scrollbar-color: #d4d4d8 #f4f4f5;
+}
+.dark textarea,
+.dark input,
+.dark [contenteditable="true"] {
+  scrollbar-color: #52525b #27272a;
+}
+textarea::-webkit-scrollbar,
+input::-webkit-scrollbar,
+[contenteditable="true"]::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+textarea::-webkit-scrollbar-track,
+input::-webkit-scrollbar-track,
+[contenteditable="true"]::-webkit-scrollbar-track {
+  background: #f4f4f5;
+  border-radius: 3px;
+}
+.dark textarea::-webkit-scrollbar-track,
+.dark input::-webkit-scrollbar-track,
+.dark [contenteditable="true"]::-webkit-scrollbar-track {
+  background: #27272a;
+}
+textarea::-webkit-scrollbar-thumb,
+input::-webkit-scrollbar-thumb,
+[contenteditable="true"]::-webkit-scrollbar-thumb {
+  background: #d4d4d8;
+  border-radius: 3px;
+}
+.dark textarea::-webkit-scrollbar-thumb,
+.dark input::-webkit-scrollbar-thumb,
+.dark [contenteditable="true"]::-webkit-scrollbar-thumb {
   background: #52525b;
 }
 

@@ -15,8 +15,8 @@ export default function CommentImages({ images, onImageClick }: CommentImagesPro
   if (images.length === 1) {
     return (
       <div
-        className="group relative mt-2 inline-block cursor-pointer overflow-hidden rounded-lg"
-        style={{ maxWidth: 280, aspectRatio: "4/3" }}
+        className="group relative mt-2 inline-block cursor-pointer rounded-lg"
+        style={{ maxWidth: 280 }}
         onClick={() => onImageClick(0)}
       >
         <img
@@ -24,9 +24,9 @@ export default function CommentImages({ images, onImageClick }: CommentImagesPro
           alt=""
           loading="lazy"
           decoding="async"
-          className="h-full w-full object-cover"
+          className="h-auto max-h-60 w-auto max-w-full rounded-lg object-contain"
         />
-        <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-opacity duration-200 group-hover:bg-black/40">
+        <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/0 transition-opacity duration-200 group-hover:bg-black/40">
           <svg
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 24 24"
@@ -59,7 +59,6 @@ export default function CommentImages({ images, onImageClick }: CommentImagesPro
           <div
             key={i}
             className={`group relative cursor-pointer overflow-hidden rounded-md ${i >= MOBILE_MAX_VISIBLE ? 'hidden sm:block' : ''}`}
-            style={{ aspectRatio: "1/1" }}
             onClick={() => onImageClick(i)}
             onMouseEnter={() => setHoveredIndex(i)}
             onMouseLeave={() => setHoveredIndex(null)}
@@ -69,7 +68,7 @@ export default function CommentImages({ images, onImageClick }: CommentImagesPro
               alt=""
               loading="lazy"
               decoding="async"
-              className="h-full w-full object-cover"
+              className="h-auto w-full object-contain"
             />
             {hoveredIndex === i && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/40 transition-opacity duration-200">

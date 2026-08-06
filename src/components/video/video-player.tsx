@@ -8,6 +8,7 @@ import { cachedFetch } from "@/lib/fetch-cache";
 import { consumeAutoPlayVideo } from "@/lib/signals";
 import { getVodPlayAuth } from "@/lib/vod-cache";
 import { type PlayMode, MODES, fetchPlayMode, updatePlayMode } from "@/lib/play-mode";
+import { isEditableTarget, isComposingEvent } from "@/lib/keyboard";
 
 const VIDEO_MODES: { key: PlayMode; label: string; icon: typeof Repeat }[] = [
   { key: "loop", label: "循环播放", icon: Repeat },
@@ -234,14 +235,12 @@ export default function VideoPlayer({
   const [showTooltip, setShowTooltip] = useState(false);
   const modeRef = useRef<PlayMode>("loop");
   const nextVideoIdRef = useRef(initialNextVideoId);
-  const prevVideoIdRef = useRef(initialPrevVideoId);
   const autoPlayRef = useRef(false);
   const onVideoChangeRef = useRef(onVideoChange);
   const userIdRef = useRef(userId);
   const currentVideoRef = useRef(initialVideo);
 
   nextVideoIdRef.current = initialNextVideoId;
-  prevVideoIdRef.current = initialPrevVideoId;
   onVideoChangeRef.current = onVideoChange;
   userIdRef.current = userId;
   currentVideoRef.current = initialVideo;
@@ -260,21 +259,23 @@ export default function VideoPlayer({
     } catch { window.location.href = `/video/${nextVideoIdRef.current}`; }
   }, []);
 
-  const navigateToPrev = useCallback(async () => {
-    if (!prevVideoIdRef.current) return;
+  const seekBy = useCallback((delta: number) => {
+    const player = aliPlayerRef.current;
+    if (!player) return;
     try {
-      const res = await fetch(`/api/videos/${prevVideoIdRef.current}/detail`);
-      if (!res.ok) return;
-      const data = await res.json();
-      window.history.replaceState(null, "", `/video/${data.id}`);
-      onVideoChangeRef.current?.(data);
-    } catch { window.location.href = `/video/${prevVideoIdRef.current}`; }
+      const duration = typeof player.getDuration === "function" ? (player.getDuration() || 0) : 0;
+      const current = typeof player.currentTime === "function" ? (player.currentTime() || 0) : 0;
+      const target = Math.max(0, duration > 0 ? Math.min(current + delta, duration) : current + delta);
+      player.seek(target);
+    } catch {}
   }, []);
 
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (e.key === "ArrowRight") { e.preventDefault(); navigateToNext(); }
-      else if (e.key === "ArrowLeft") { e.preventDefault(); navigateToPrev(); }
+      if (isEditableTarget(e) || isComposingEvent(e)) return;
+      const key = e.key.toLowerCase();
+      if (key === "arrowright" || key === "d") { e.preventDefault(); seekBy(5); }
+      else if (key === "arrowleft" || key === "a") { e.preventDefault(); seekBy(-5); }
       else if (e.key === " ") {
         e.preventDefault();
         const player = aliPlayerRef.current;
@@ -286,7 +287,7 @@ export default function VideoPlayer({
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [navigateToNext, navigateToPrev]);
+  }, [seekBy]);
 
   useEffect(() => {
     let destroyed = false;

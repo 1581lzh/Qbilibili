@@ -3,11 +3,13 @@ import { z } from "zod";
 export const usernameSchema = z
   .string()
   .min(1, "用户名不能为空")
+  .max(14, "用户名最多14个字符")
   .regex(/^[a-zA-Z0-9_\u4e00-\u9fa5]+$/, "用户名只能包含字母、数字、下划线和中文");
 
 export const passwordSchema = z
   .string()
-  .min(1, "密码不能为空");
+  .min(1, "密码不能为空")
+  .max(18, "密码最多18个字符");
 
 export const registerSchema = z.object({
   name: usernameSchema,
@@ -15,8 +17,8 @@ export const registerSchema = z.object({
 });
 
 export const loginSchema = z.object({
-  name: z.string().min(1, "请输入用户名"),
-  password: z.string().min(1, "请输入密码"),
+  name: z.string().min(1, "请输入用户名").max(14, "用户名最多14个字符"),
+  password: z.string().min(1, "请输入密码").max(18, "密码最多18个字符"),
 });
 
 const safeUrl = z
@@ -65,7 +67,7 @@ export const videoSchema = z.object({
     .trim(),
   description: z
     .string()
-    .max(2000, "描述最多2000个字符")
+    .max(1000, "描述最多1000个字符")
     .trim()
     .optional()
     .nullable(),
@@ -89,7 +91,7 @@ export const videoUpdateSchema = z.object({
     .optional(),
   description: z
     .string()
-    .max(2000, "描述最多2000个字符")
+    .max(1000, "描述最多1000个字符")
     .trim()
     .optional()
     .nullable(),

@@ -8,11 +8,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { optimizedCover } from "@/lib/image";
 import { setAutoPlayVideo, setHighlightComment } from "@/lib/signals";
-
-const AVATAR_COLORS = [
-  "bg-pink-500", "bg-violet-500", "bg-blue-500", "bg-cyan-500",
-  "bg-green-500", "bg-amber-500", "bg-red-500", "bg-indigo-500",
-];
+import { avatarColorFor } from "@/lib/avatar";
 
 const TAB_SLIDE_VARIANTS = {
   enter: (dir: number) => ({ opacity: 0, x: dir * 60 }),
@@ -61,8 +57,6 @@ interface ReceivedLikeItem {
   user: { id: string; name: string; avatar: string | null };
   comment: CommentLikeItem;
 }
-
-const AVATAR_COLORS_LIST = AVATAR_COLORS;
 
 export default function ProfilePage() {
   const { data: session, status, update } = useSession();
@@ -230,14 +224,7 @@ export default function ProfilePage() {
     );
   }
 
-  const hash = (() => {
-    let h = 0;
-    for (let i = 0; i < profile.name.length; i++) {
-      h = profile.name.charCodeAt(i) + ((h << 5) - h);
-    }
-    return Math.abs(h);
-  })();
-  const avatarColor = AVATAR_COLORS[hash % AVATAR_COLORS.length];
+  const avatarColor = avatarColorFor(profile.name);
 
   const handleDelete = async (videoId: string) => {
     if (!confirm("确定要删除这个视频吗？此操作不可恢复。")) return;
@@ -358,17 +345,19 @@ export default function ProfilePage() {
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
+                  maxLength={14}
                   className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-[#FB7299] focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
                 />
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                  新密码（留空则不修改）
+                  新密码（留空则不修改，最多18字符）
                 </label>
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  maxLength={18}
                   className="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-[#FB7299] focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
                 />
               </div>
@@ -393,6 +382,7 @@ export default function ProfilePage() {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="请输入密码以确认注销"
+                  maxLength={18}
                   className="mb-3 w-full rounded-md border border-red-300 bg-white px-3 py-2 text-sm text-zinc-900 focus:border-red-500 focus:outline-none dark:border-red-700 dark:bg-zinc-800 dark:text-zinc-100"
                 />
                 <button
@@ -447,12 +437,20 @@ export default function ProfilePage() {
                         </h3>
                         <p className="mt-0.5 text-xs text-zinc-500">{v._count.likes} 赞 · {v._count.comments} 评论</p>
                       </Link>
-                      <button
-                        onClick={() => handleDelete(v.id)}
-                        className="mt-1 text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
-                      >
-                        删除
-                      </button>
+                      <div className="mt-1 flex items-center gap-2">
+                        <Link
+                          href={`/edit/${v.id}`}
+                          className="text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                        >
+                          编辑
+                        </Link>
+                        <button
+                          onClick={() => handleDelete(v.id)}
+                          className="text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                        >
+                          删除
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>

@@ -12,6 +12,8 @@ import { Pencil, Repeat, Play, SkipForward, Volume2, Volume1, VolumeX } from "lu
 import { type PlayMode, MODES, fetchPlayMode, updatePlayMode } from "@/lib/play-mode";
 import { fetchVolume, updateVolume, getSavedVolume } from "@/lib/volume";
 import { toHttps } from "@/lib/image";
+import { isEditableTarget, isComposingEvent } from "@/lib/keyboard";
+import { avatarColorFor } from "@/lib/avatar";
 
 interface VideoInfo {
   id: string;
@@ -102,13 +104,10 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
     }
     return false;
   });
-  const dirRef = useRef(0);
-  const [, forceRender] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
   const audioUrlsRef = useRef<string[]>([]);
   const livePhotoVideoRef = useRef<HTMLVideoElement>(null);
   const liveCanvasRef = useRef<HTMLCanvasElement>(null);
-  const [needBlurBg, setNeedBlurBg] = useState(false);
   const autoPlayTimerRef = useRef<NodeJS.Timeout | null>(null);
   const indicatorTimerRef = useRef<NodeJS.Timeout | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -118,33 +117,39 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
   const lastTickRef = useRef(0); // last RAF timestamp
   const modeRef = useRef<PlayMode>(playMode);
 
+  // ---- 相册式横向轨道：当前页 + 前后相邻页（循环）并排排布，拖动/滑动切换 ----
+  // 轨道总宽 = 3×容器宽，居中显示 current 页（translateX = -W + dragX）。
+  // 鼠标按住拖动实时跟手（dragX），松手后按位移滑动到相邻页或回弹。
+  const [dragX, setDragX] = useState(0);
+  const [transitioning, setTransitioning] = useState(false); // 滑动到位动画中
+  const [dragActive, setDragActive] = useState(false); // 鼠标按住拖动中（用于隐藏实况 canvas，避免遮挡相邻页）
+  const dragXRef = useRef(0);
+  const isDraggingRef = useRef(false);      // 鼠标左键是否按住拖动中
+  const dragMovedRef = useRef(false);       // 本次按下是否发生了拖拽（用于区分点击）
+  const dragStartXRef = useRef(0);
+  const dragBaseXRef = useRef(0);
+  const isSlidingRef = useRef(false);       // 滑动动画进行中，防止重复触发
+  const containerWidthRef = useRef(0);
+  const prevIndexRef = useRef(0);
+  const nextIndexRef = useRef(0);
+  useEffect(() => { prevIndexRef.current = (currentIndex - 1 + images.length) % images.length; });
+  useEffect(() => { nextIndexRef.current = (currentIndex + 1) % images.length; });
+
   useEffect(() => { modeRef.current = mode; }, [mode]);
   const stoppedBySingleModeRef = useRef(false);
 
-  // 判断当前图片是否需要模糊背景填充黑边：
-  // 比较「当前图片实际比例」与「容器实际比例」，差异超过阈值（存在黑边）才显示。
-  // 用 ResizeObserver 监听容器尺寸变化 + 图片 onLoad 获取真实比例，自动适配移动端/PC 端。
-  const curImageRatioRef = useRef<number | null>(null);
+  // 图片比例按索引缓存（轨道相邻页的模糊背景与主图随页面一起平移）
+  const imageRatioRefs = useRef<(number | null)[]>([]);
+  const [, setRatioTick] = useState(0);
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    const check = () => {
-      const cw = container.clientWidth;
-      const ch = container.clientHeight;
-      const ratio = curImageRatioRef.current;
-      if (cw <= 0 || ch <= 0 || !ratio || ratio <= 0) return;
-      const containerAspect = cw / ch;
-      const diff = Math.abs(ratio - containerAspect) / Math.max(ratio, containerAspect);
-      setNeedBlurBg(diff > 0.05);
-    };
-
-    // 先按当前已知比例评估一次
-    check();
-    const ro = new ResizeObserver(check);
+    // 容器尺寸变化时强制重渲染，保证轨道布局与图片正常显示
+    const ro = new ResizeObserver(() => setRatioTick((n) => n + 1));
     ro.observe(container);
     return () => ro.disconnect();
-  }, [currentIndex]);
+  }, []);
 
   // Parse musicUrls（统一转 HTTPS，避免 HTTPS 页面加载 HTTP 资源被 Mixed Content 拦截）
   const audioUrls = useMemo(() => {
@@ -167,6 +172,53 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
   // Track each live photo video's duration (seconds) to balance auto-mode preview times
   const liveDurationsRef = useRef<number[]>([]);
   const [, setLiveDurationsTick] = useState(0);
+
+  // ---- 预加载窗口：预览第 currentIndex 张时，提前加载前后各 2 张（共 4 张）的图片
+  //      与实况视频数据。图片与模糊背景是同一 URL，一次加载即可同时就绪；
+  //      实况视频只预加载数据（隐藏 video 元素缓冲）、不播放，非预览状态始终显示封面，
+  //      确保用户切到该实况时视频已就绪、可立即淡入播放，不会出现"切过来才开始加载"。
+  const PREFETCH_RANGE = 2;
+  const prefetchImagesRef = useRef<Set<string>>(new Set());
+  const prefetchVideosRef = useRef<Map<string, HTMLVideoElement>>(new Map());
+  useEffect(() => {
+    if (images.length <= 1) return;
+    const idxs: number[] = [];
+    for (let off = -PREFETCH_RANGE; off <= PREFETCH_RANGE; off++) {
+      if (off === 0) continue;
+      idxs.push((currentIndex + off + images.length) % images.length);
+    }
+    // 图片预加载（主图 + 模糊背景同一 URL）
+    for (const idx of idxs) {
+      const url = images[idx];
+      if (!url || prefetchImagesRef.current.has(url)) continue;
+      prefetchImagesRef.current.add(url);
+      const img = new Image();
+      img.decoding = "async";
+      img.src = url;
+    }
+    // 实况视频数据预加载（隐藏 video，仅缓冲、不播放）
+    for (const idx of idxs) {
+      const liveUrl = liveVideos[idx] || "";
+      if (!liveUrl || prefetchVideosRef.current.has(liveUrl)) continue;
+      const v = document.createElement("video");
+      v.preload = "auto";
+      v.muted = true;
+      v.playsInline = true;
+      v.style.cssText = "position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;";
+      v.src = liveUrl;
+      document.body.appendChild(v);
+      prefetchVideosRef.current.set(liveUrl, v);
+    }
+  }, [currentIndex, images.length]);
+
+  // 组件卸载时清理预加载的隐藏 video 元素
+  useEffect(() => {
+    return () => {
+      prefetchVideosRef.current.forEach((v) => v.remove());
+      prefetchVideosRef.current.clear();
+      prefetchImagesRef.current.clear();
+    };
+  }, []);
 
   // 实况照片阶段机：static-preview → live-fade-in（视频淡入并播放）→ live-fade-out → static-preview
   // 仅当前图片是实况且正在播放时参与。静止图片不受影响。
@@ -256,20 +308,97 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
     return 5000; // default 5s
   }, [imageDuration, totalAudioDuration, images.length, currentIndex]);
 
-  const goToImage = useCallback((newIndex: number) => {
-    setCurrentIndex(prev => {
-      const dir = newIndex > prev ? 1 : -1;
-      dirRef.current = dir;
-      forceRender(n => n + 1);
-      return newIndex;
-    });
+  // 滑动动画：轨道从当前位置滑过一页（dir=1 下一张从右进、dir=-1 上一张），
+  // 动画结束后把 currentIndex 更新为相邻页并瞬间复位轨道（内容已换，视觉无缝）。
+  // manual=true 表示用户手动切换（按键/拖拽/按钮），会暂停自动轮播并显示满进度；
+  // manual=false 表示自动轮播推进，不暂停。
+  const slideBy = useCallback((dir: 1 | -1, manual: boolean) => {
+    if (isSlidingRef.current || isDraggingRef.current) return;
+    const W = containerWidthRef.current || 0;
+    if (!W) {
+      setCurrentIndex(prev => (prev + dir + images.length) % images.length);
+      return;
+    }
+    if (manual) setUserInteracted(true);
+    isSlidingRef.current = true;
+    setTransitioning(true);
+    // 向右切换（dir=1）：轨道向左滑一页（dragX=-W），下一张从右侧进入
+    dragXRef.current = -dir * W;
+    setDragX(-dir * W);
+    window.setTimeout(() => {
+      setCurrentIndex(prev => (prev + dir + images.length) % images.length);
+      dragXRef.current = 0;
+      setDragX(0);
+      setTransitioning(false);
+      isSlidingRef.current = false;
+    }, 320);
+  }, [images.length]);
+
+  // 松手后结算：位移超过 1/4 页宽则滑到相邻页（循环），否则回弹
+  // 手动拖拽切换与按键一致：暂停自动轮播、进度满显示
+  const settleDrag = useCallback(() => {
+    if (isSlidingRef.current) return;
+    const W = containerWidthRef.current || 0;
+    if (!W) return;
+    const total = dragXRef.current;
+    isSlidingRef.current = true;
+    setTransitioning(true);
+    if (total <= -W * 0.25) {
+      const target = nextIndexRef.current;
+      setUserInteracted(true);
+      dragXRef.current = -W;
+      setDragX(-W);
+      window.setTimeout(() => {
+        setCurrentIndex(target);
+        elapsedRef.current = 0;
+        setProgress(100);
+        dragXRef.current = 0;
+        setDragX(0);
+        setTransitioning(false);
+        isSlidingRef.current = false;
+      }, 320);
+    } else if (total >= W * 0.25) {
+      const target = prevIndexRef.current;
+      setUserInteracted(true);
+      dragXRef.current = W;
+      setDragX(W);
+      window.setTimeout(() => {
+        setCurrentIndex(target);
+        elapsedRef.current = 0;
+        setProgress(100);
+        dragXRef.current = 0;
+        setDragX(0);
+        setTransitioning(false);
+        isSlidingRef.current = false;
+      }, 320);
+    } else {
+      dragXRef.current = 0;
+      setDragX(0);
+      window.setTimeout(() => {
+        setTransitioning(false);
+        isSlidingRef.current = false;
+      }, 320);
+    }
   }, []);
 
   // Manual image switch - pauses auto-play
   const handleManualSwitch = useCallback((newIndex: number) => {
     setUserInteracted(true);
-    goToImage(newIndex);
-  }, [goToImage]);
+    const cur = currentIndexRef.current;
+    if (newIndex === cur) return;
+    const len = imagesLengthRef.current;
+    let diff = newIndex - cur;
+    if (diff > len / 2) diff -= len;
+    if (diff < -len / 2) diff += len;
+    if (diff === 1 || diff === -1) {
+      slideBy(diff as 1 | -1, true);
+    } else {
+      // 跳转非相邻页（进度条远跳）：直接切换，不做滑动
+      setCurrentIndex(newIndex);
+      dragXRef.current = 0;
+      setDragX(0);
+    }
+  }, [slideBy]);
 
   // Reset elapsed on manual switch
   useEffect(() => {
@@ -294,33 +423,27 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
   const advanceImage = useCallback(() => {
     elapsedRef.current = 0;
     const currentMode = modeRef.current;
-    setCurrentIndex(prev => {
-      const isLast = prev >= images.length - 1;
-      if (isLast) {
-        if (currentMode === "single") {
-          // Stop on last image
-          stoppedBySingleModeRef.current = true;
-          setIsPlaying(false);
-          setProgress(100);
-          return prev;
-        }
-        if (currentMode === "next") {
-          // Navigate to next video
-          setIsPlaying(false);
-          setProgress(100);
-          onNext?.();
-          return prev;
-        }
-        // loop: back to first
-        dirRef.current = 1;
-        forceRender(n => n + 1);
-        return 0;
+    const cur = currentIndexRef.current;
+    const isLast = cur >= images.length - 1;
+    if (isLast) {
+      if (currentMode === "single") {
+        // Stop on last image
+        stoppedBySingleModeRef.current = true;
+        setIsPlaying(false);
+        setProgress(100);
+        return;
       }
-      dirRef.current = 1;
-      forceRender(n => n + 1);
-      return prev + 1;
-    });
-  }, [images.length, onNext]);
+      if (currentMode === "next") {
+        // Navigate to next video
+        setIsPlaying(false);
+        setProgress(100);
+        onNext?.();
+        return;
+      }
+      // loop: back to first (slide 会按 % 循环回 0)
+    }
+    slideBy(1, false);
+  }, [images.length, onNext, slideBy]);
 
   // 实况交叉淡化核心（单 canvas 方案）：
   // 不再依赖封面 <img> 与 canvas 的层叠关系 —— Edge 下 opacity:0 的独立合成层仍会遮挡下方内容
@@ -738,16 +861,16 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
   }, []);
 
   // Keep refs in sync so native event listeners always call latest callbacks
-  const handleManualSwitchRef = useRef(handleManualSwitch);
   const togglePlayRef = useRef(togglePlay);
   const currentIndexRef = useRef(currentIndex);
   const imagesLengthRef = useRef(images.length);
   const currentAudioIndexRef = useRef(currentAudioIndex);
-  useEffect(() => { handleManualSwitchRef.current = handleManualSwitch; });
+  const settleDragRef = useRef(settleDrag);
   useEffect(() => { togglePlayRef.current = togglePlay; });
   useEffect(() => { currentIndexRef.current = currentIndex; });
   useEffect(() => { imagesLengthRef.current = images.length; });
   useEffect(() => { currentAudioIndexRef.current = currentAudioIndex; });
+  useEffect(() => { settleDragRef.current = settleDrag; });
 
   const handleAudioLoadedMetadata = () => {
     if (audioRef.current) {
@@ -818,10 +941,12 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
   // Keyboard events
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "ArrowLeft") {
+      if (isEditableTarget(e) || isComposingEvent(e)) return;
+      const key = e.key.toLowerCase();
+      if (key === "arrowleft" || key === "a") {
         e.preventDefault();
         handleManualSwitch(Math.max(0, currentIndex - 1));
-      } else if (e.key === "ArrowRight") {
+      } else if (key === "arrowright" || key === "d") {
         e.preventDefault();
         handleManualSwitch(Math.min(images.length - 1, currentIndex + 1));
       } else if (e.key === " ") {
@@ -833,69 +958,87 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [currentIndex, images.length, handleManualSwitch, togglePlay]);
 
-  // Native touch/click handlers — must use addEventListener with { passive: false }
-  // to guarantee preventDefault() blocks the synthesized click event (React's
-  // synthetic onTouchStart is passive by default and ignores preventDefault).
-  // All callbacks accessed via refs so this effect never re-runs.
+  // 交互（拖拽/点击/双击）：用 Pointer 事件统一处理鼠标与触摸。
+  // - 鼠标左键 / 触摸按住拖动：图片实时跟手平移，松手后滑到相邻页或回弹（相册式）。
+  // - 无位移的触摸 = 点击：双击切换播放/暂停，单击切换控制栏可见性。
+  // - 无位移的鼠标 = 单击：交给 click 事件处理播放/暂停。
+  // touchstart 仅在非交互区域 preventDefault，阻断移动端合成 click，避免与 pointerup 重复处理。
+  // 所有回调通过 ref 访问，effect 只运行一次。
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
-    let touchStartX = 0;
-    let touchStartY = 0;
+    // 容器宽度（轨道布局 + 拖拽结算需要）
+    const measure = () => { containerWidthRef.current = el.clientWidth || 0; };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
 
     const onTouchStart = (e: Event) => {
-      const te = e as TouchEvent;
-      touchStartX = te.touches[0].clientX;
-      touchStartY = te.touches[0].clientY;
       // Block click synthesis on non-interactive areas
-      const t = (te.target as HTMLElement);
+      const t = (e.target as HTMLElement);
       if (!t.closest("button") && !t.closest("a")) {
-        te.preventDefault();
+        e.preventDefault();
       }
     };
 
-    const onTouchEnd = (e: Event) => {
-      const te = e as TouchEvent;
-      const endX = te.changedTouches[0].clientX;
-      const endY = te.changedTouches[0].clientY;
-      const diffX = touchStartX - endX;
-      const diffY = touchStartY - endY;
+    const onPointerDown = (e: Event) => {
+      const pe = e as PointerEvent;
+      if (pe.pointerType !== "mouse" && pe.pointerType !== "touch") return;
+      if (pe.pointerType === "mouse" && pe.button !== 0) return;
+      const t = pe.target as HTMLElement;
+      if (t.closest("button") || t.closest("a") || t.closest("[data-controlbar]")) return;
+      if (isSlidingRef.current || isDraggingRef.current) return;
+      isDraggingRef.current = true;
+      dragMovedRef.current = false;
+      dragStartXRef.current = pe.clientX;
+      dragBaseXRef.current = dragXRef.current;
+      el.setPointerCapture?.(pe.pointerId);
+    };
 
-      // Swipe → navigate
-      if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 50) {
-        const len = imagesLengthRef.current;
-        const idx = currentIndexRef.current;
-        if (diffX > 0) handleManualSwitchRef.current(Math.min(len - 1, idx + 1));
-        else handleManualSwitchRef.current(Math.max(0, idx - 1));
+    const onPointerMove = (e: Event) => {
+      if (!isDraggingRef.current) return;
+      const pe = e as PointerEvent;
+      const dx = pe.clientX - dragStartXRef.current;
+      if (Math.abs(dx) > 6 && !dragMovedRef.current) {
+        dragMovedRef.current = true;
+        setDragActive(true);
+      }
+      const W = containerWidthRef.current || 0;
+      if (!W) return;
+      const next = Math.max(-W, Math.min(W, dragBaseXRef.current + dx));
+      dragXRef.current = next;
+      setDragX(next);
+    };
+
+    const onPointerUp = (e: Event) => {
+      if (!isDraggingRef.current) return;
+      isDraggingRef.current = false;
+      setDragActive(false);
+      const pe = e as PointerEvent;
+      if (dragMovedRef.current) {
+        settleDragRef.current();
+        // dragMovedRef 保持 true 让随后的 click 被忽略，再延迟复位
+        window.setTimeout(() => { dragMovedRef.current = false; }, 0);
         return;
       }
-
-      // Double-tap → toggle play/pause (keep controls state unchanged)
-      const now = Date.now();
-      if (now - lastTapRef.current < 300) {
-        togglePlayRef.current();
-        lastTapRef.current = 0;
-      } else {
-        // Single tap → toggle controls visibility
-        setShowControls(prev => !prev);
-        lastTapRef.current = now;
+      // 未移动 = 点击
+      if (pe.pointerType === "touch") {
+        const now = Date.now();
+        if (now - lastTapRef.current < 300) {
+          togglePlayRef.current();
+          lastTapRef.current = 0;
+        } else {
+          setShowControls(prev => !prev);
+          lastTapRef.current = now;
+        }
       }
-    };
-
-    // 检测是否是真正的触摸设备（排除触摸屏笔记本）
-    const isTouchDevice = () => {
-      // 有 ontouchstart 事件的是真正的触摸设备
-      if ("ontouchstart" in window) return true;
-      // maxTouchPoints > 0 且没有鼠标的是触摸设备
-      if (navigator.maxTouchPoints > 0) {
-        // 检查是否通过媒体查询判断为触摸设备
-        return window.matchMedia("(pointer: coarse)").matches;
-      }
-      return false;
+      // 鼠标未移动的单击由 click 事件处理
     };
 
     const onClick = (e: Event) => {
+      // 拖拽松手后触发的 click 视为拖动的一部分，不处理（不触发播放/暂停）
+      if (dragMovedRef.current) { dragMovedRef.current = false; return; }
       // 忽略按钮/链接的点击（React stopPropagation 无法阻止原生事件冒泡到此）
       const t = (e as MouseEvent).target as HTMLElement;
       // 点击控制栏（含空白处）不触发播放/暂停，只切换控制栏可见性
@@ -904,25 +1047,22 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
         return;
       }
       if (t.closest("button") || t.closest("a")) return;
-      // Mobile: single tap toggles controls visibility
-      if (isTouchDevice()) {
-        setShowControls(prev => !prev);
-      } else {
-        togglePlayRef.current();
-      }
+      togglePlayRef.current();
     };
 
-    // Only attach touch handlers on touch devices (matching video-player.tsx pattern)
-    if (isTouchDevice()) {
-      el.addEventListener("touchstart", onTouchStart, { capture: true, passive: false });
-      el.addEventListener("touchend", onTouchEnd, { capture: true, passive: true });
-    }
+    el.addEventListener("touchstart", onTouchStart, { capture: true, passive: false });
+    el.addEventListener("pointerdown", onPointerDown);
+    el.addEventListener("pointermove", onPointerMove);
+    el.addEventListener("pointerup", onPointerUp);
     el.addEventListener("click", onClick);
 
     return () => {
       el.removeEventListener("touchstart", onTouchStart);
-      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("pointerdown", onPointerDown);
+      el.removeEventListener("pointermove", onPointerMove);
+      el.removeEventListener("pointerup", onPointerUp);
       el.removeEventListener("click", onClick);
+      ro.disconnect();
     };
   }, []); // Empty deps — all state accessed via refs
 
@@ -938,6 +1078,7 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
     <div
       ref={containerRef}
       className="relative h-full w-full bg-black group"
+      style={{ touchAction: "none" }}
       data-live-phase={livePhase}
       data-live-visible={liveFadeVisible}
     >
@@ -974,7 +1115,7 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
            同一画布里用 globalAlpha 逐帧混合「封面帧 + 实况视频帧」。
            canvas 置于封面 <img> 上方（z-[12] > z-[11]），实况阶段由 canvas 完全覆盖封面；
            封面 <img> 常驻在下层，作为「canvas 首帧绘制前的无缝底衬」，消除淡入时的空档闪烁。 */}
-      {currentLiveVideo && liveFadeVisible && (
+      {currentLiveVideo && liveFadeVisible && !dragActive && (
         <canvas
           ref={liveCanvasRef}
           className="absolute inset-0 z-[12] h-full w-full"
@@ -983,58 +1124,47 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
         />
       )}
 
-      {/* 高斯模糊背景填充黑边：随当前图片动态变化，仅在存在黑边时显示。
-          使用独立 AnimatePresence 让背景与前景一起交叉淡化切换，避免原地突变。 */}
-      <AnimatePresence initial={false}>
-        {needBlurBg && (
-          <motion.div
-            key={`bg-${currentIndex}`}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.3 }}
-            className="pointer-events-none absolute inset-0 z-0 bg-black"
-            aria-hidden
+      {/* 相册式横向轨道：当前页 + 前后相邻页（循环）并排，鼠标按住拖动实时跟手平移，
+          松手后滑动到相邻页或回弹。每页同时包含自己的高斯模糊背景与清晰主图，二者一起平移。
+          每页 overflow-hidden 把模糊（scale-110 + blur 60px）裁剪在本页内，避免相邻页模糊串色。 */}
+      {(() => {
+        const prevIdx = (currentIndex - 1 + images.length) % images.length;
+        const nextIdx = (currentIndex + 1) % images.length;
+        return (
+          <div
+            className="absolute inset-0 z-[11] flex h-full cursor-grab select-none"
+            style={{
+              transform: `translateX(calc(-100% + ${dragX}px))`,
+              transition: transitioning ? "transform 320ms cubic-bezier(0.22, 1, 0.36, 1)" : "none",
+            }}
           >
-            <img
-              src={images[currentIndex]}
-              alt=""
-              className="h-full w-full scale-110 object-cover opacity-100 blur-[60px] brightness-[0.9] saturate-[1.15]"
-              decoding="async"
-            />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* 主图片：静态封面帧，常驻渲染（实况阶段也保留）。
-           置于 canvas 下方（z-[11] < canvas z-[12]）：
-           - 非实况阶段：封面直接显示
-           - 实况阶段：canvas 在上方绘制封面帧+实况帧的交叉淡化，完全覆盖封面；
-             封面 img 作为 canvas 首帧绘制前的无缝底衬，避免「封面消失 → canvas 未画」
-             的空档闪烁；且 Edge 对 opacity:0 合成层的遮挡问题不影响（封面在下层被覆盖） */}
-      <img
-        key={`img-${currentIndex}`}
-        src={images[currentIndex]}
-        alt={`Image ${currentIndex + 1}`}
-        onLoad={(e) => {
-          const img = e.currentTarget;
-          if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-            curImageRatioRef.current = img.naturalWidth / img.naturalHeight;
-            // 触发容器内比例检查
-            const container = containerRef.current;
-            if (container) {
-              const cw = container.clientWidth;
-              const ch = container.clientHeight;
-              const ratio = curImageRatioRef.current;
-              const containerAspect = cw / ch;
-              const diff = Math.abs(ratio - containerAspect) / Math.max(ratio, containerAspect);
-              setNeedBlurBg(diff > 0.05);
-            }
-          }
-        }}
-        className="absolute inset-0 z-[11] h-full w-full object-contain"
-        draggable={false}
-      />
+            {[prevIdx, currentIndex, nextIdx].map((idx) => (
+              <div key={`page-${idx}`} className="relative h-full w-full shrink-0 overflow-hidden">
+                <img
+                  src={images[idx]}
+                  alt=""
+                  className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover blur-[60px] brightness-[0.9] saturate-[1.15]"
+                  decoding="async"
+                  draggable={false}
+                />
+                <img
+                  src={images[idx]}
+                  alt={`Image ${idx + 1}`}
+                  onLoad={(e) => {
+                    const img = e.currentTarget;
+                    if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                      imageRatioRefs.current[idx] = img.naturalWidth / img.naturalHeight;
+                      setRatioTick((n) => n + 1);
+                    }
+                  }}
+                  className="absolute inset-0 h-full w-full object-contain"
+                  draggable={false}
+                />
+              </div>
+            ))}
+          </div>
+        );
+      })()}
 
       {/* Center play/pause indicator - elastic animation like video player */}
       <AnimatePresence>
@@ -1063,10 +1193,9 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
         )}
       </AnimatePresence>
 
-      {/* Bottom control bar - like video player */}
-      <div data-controlbar className={`absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/70 to-transparent transition-opacity duration-300 opacity-0 group-hover:opacity-100 ${showControls ? '!opacity-100' : ''}`}>
-        {/* Progress bar - click a segment to jump to that image */}
-        {images.length > 1 && (
+      {/* 图片进度条内容：点击一段跳转到对应图片 */}
+      {(() => {
+        const progressBar = images.length > 1 ? (
           <div className="flex h-[9px] items-center gap-[2px] px-2 pt-2">
             {images.map((_, i) => (
               <button
@@ -1093,33 +1222,48 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
               </button>
             ))}
           </div>
-        )}
-        <div className="flex items-center justify-between p-3">
-          {/* Left: Play/Pause button */}
-          <button
-            type="button"
-            onClick={(e) => { e.stopPropagation(); togglePlay(); }}
-            className="text-white hover:text-[#FB7299]"
-          >
-            {isPlaying ? (
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            ) : (
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            )}
-          </button>
+        ) : null;
 
-          {/* Center: Image counter */}
-          <div className="text-sm text-white">
+        return (
+          <div className="absolute inset-x-0 bottom-0 z-20">
+            {/* 进度条：始终显示，位于控制栏上方；控制栏升起时被托起，落下时回到底部 */}
+            {progressBar && (
+              <div className="pointer-events-auto pb-1">
+                {progressBar}
+              </div>
+            )}
+            {/* 控制栏：grid 行高 0fr↔1fr 动画 = 从底部升起/落下（水托荷叶效果） */}
+            <div className={`grid grid-rows-[0fr] transition-[grid-template-rows] duration-300 ease-out group-hover:grid-rows-[1fr] ${showControls ? '!grid-rows-[1fr]' : ''}`}>
+              <div className="overflow-hidden">
+                <div data-controlbar className="bg-gradient-to-t from-black/70 to-transparent">
+                  <div className="grid grid-cols-3 items-center p-3">
+          {/* Left: Play/Pause button */}
+          <div className="flex justify-start">
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); togglePlay(); }}
+              className="text-white hover:text-[#FB7299]"
+            >
+              {isPlaying ? (
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              ) : (
+                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
+            </button>
+          </div>
+
+          {/* Center: Image counter (真正的水平居中，不受左右按钮宽度影响) */}
+          <div className="text-center text-sm text-white">
             {currentIndex + 1} / {images.length}
           </div>
 
           {/* Right: Mode selector + Fullscreen */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center justify-end gap-2">
             <button
               type="button"
               onClick={(e) => {
@@ -1200,7 +1344,12 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
             </button>
           </div>
         </div>
-      </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Navigation arrows - visible on hover, hidden on mobile */}
       {images.length > 1 && (
@@ -1345,7 +1494,7 @@ export default function VideoPlaySection({
           </h1>
           <div className="mt-1.5 flex items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400 sm:mt-2 sm:gap-4 sm:text-sm">
             <Link href={`/user/${state.video.author.id}`} className="flex items-center gap-2 hover:opacity-80">
-              <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#FB7299] text-[10px] font-bold text-white sm:h-8 sm:w-8 sm:text-xs">
+              <div className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white sm:h-8 sm:w-8 sm:text-xs ${avatarColorFor(state.video.author.name)}`}>
                 {state.video.author.name?.[0] || "U"}
               </div>
               <span className="font-medium text-zinc-700 dark:text-zinc-300">{state.video.author.name}</span>

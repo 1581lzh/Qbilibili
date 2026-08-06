@@ -38,6 +38,43 @@ function isImageExt(ext: string): boolean {
   return IMAGE_EXTENSIONS.includes(ext);
 }
 
+// 实况标记后缀：用于「相似名」配对，如 "1.jpg" 与 "1_实况.mp4"。
+// 支持带序号变体（"1_实况2.mp4"）及多种命名（_live/live/_mov/mov）。
+// 注意：剥离后缀后必须与图片基名完全相等，因此 "11.jpg" 与 "1.mp4" 不会误配。
+const LIVE_MARKER_SUFFIXES = [
+  "_实况", "实况",
+  "_live", "live",
+  "_mov", "mov",
+];
+
+/**
+ * 匹配实况视频：先尝试与图片基名完全相等（同名），再尝试剥离实况标记后缀后相等（相似名）。
+ * 返回匹配到的视频下标，未匹配返回 -1。
+ */
+function matchLiveVideo(base: string, videoFiles: File[], exclude: Set<number>): number {
+  // 1. 精确同名
+  for (let i = 0; i < videoFiles.length; i++) {
+    if (exclude.has(i)) continue;
+    if (stripExt(videoFiles[i].name).toLowerCase() === base) return i;
+  }
+  // 2. 相似名：视频基名去掉实况标记后缀（可带数字序号）后与图片基名完全相等
+  for (let i = 0; i < videoFiles.length; i++) {
+    if (exclude.has(i)) continue;
+    const videoBase = stripExt(videoFiles[i].name).toLowerCase();
+    for (const suffix of LIVE_MARKER_SUFFIXES) {
+      // 纯后缀：如 "1_实况"
+      if (videoBase.length > suffix.length && videoBase.endsWith(suffix)) {
+        if (videoBase.slice(0, -suffix.length) === base) return i;
+      }
+      // 带序号后缀：如 "1_实况2"
+      const numberedMatch = new RegExp(`^(.*?)${suffix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\d+$`);
+      const nm = videoBase.match(numberedMatch);
+      if (nm && nm[1] === base) return i;
+    }
+  }
+  return -1;
+}
+
 /**
  * Try to parse a single-file Motion Photo (JPEG with embedded MP4).
  * Returns { image, video } or null if it's a static image / not parseable.
@@ -135,6 +172,97 @@ export async function extractLivePhoto(file: File): Promise<{ image: File; video
 }
 
 /**
+ * Read a video file's duration in seconds.
+ * Resolves to null if the duration can't be determined (e.g. corrupted file).
+ */
+export function readVideoDuration(file: File): Promise<number | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.muted = true;
+    const cleanup = () => {
+      video.removeAttribute("src");
+      URL.revokeObjectURL(url);
+    };
+    const done = (value: number | null) => {
+      cleanup();
+      resolve(value);
+    };
+    video.onloadedmetadata = () => {
+      if (isFinite(video.duration) && video.duration > 0) {
+        done(video.duration);
+      } else {
+        done(null);
+      }
+    };
+    video.onerror = () => done(null);
+    video.src = url;
+  });
+}
+
+/**
+ * Extract a poster frame (first frame by default) from a video file.
+ * Draws the frame to a canvas and returns a Blob URL that can be used
+ * as an <img>/<video poster> preview. Returns null on failure.
+ * Note: callers should revoke the returned URL when no longer needed.
+ */
+export function extractVideoCover(file: File, time = 0): Promise<string | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement("video");
+    video.preload = "auto";
+    video.muted = true;
+    video.playsInline = true;
+    const cleanup = () => {
+      video.removeAttribute("src");
+      URL.revokeObjectURL(url);
+    };
+    video.onloadeddata = () => {
+      try {
+        video.currentTime = Math.max(0, Math.min(time, Math.max(0, (video.duration || 0) - 0.05)));
+      } catch {
+        // seeking not yet ready; fall through
+      }
+    };
+    video.onseeked = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        const w = video.videoWidth || 640;
+        const h = video.videoHeight || 360;
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          cleanup();
+          resolve(null);
+          return;
+        }
+        ctx.drawImage(video, 0, 0, w, h);
+        canvas.toBlob((blob) => {
+          if (!blob) {
+            cleanup();
+            resolve(null);
+            return;
+          }
+          const coverUrl = URL.createObjectURL(blob);
+          cleanup();
+          resolve(coverUrl);
+        }, "image/jpeg", 0.85);
+      } catch {
+        cleanup();
+        resolve(null);
+      }
+    };
+    video.onerror = () => {
+      cleanup();
+      resolve(null);
+    };
+    video.src = url;
+  });
+}
+
+/**
  * Quick check whether a batch of files contains anything that needs live-photo processing:
  * a .livp archive, a HEIC/HEIF image, or video files present alongside images (Apple split format).
  * If false, the caller can use the legacy plain-image upload path (with compression).
@@ -193,9 +321,8 @@ export async function processImageFiles(files: File[]): Promise<ProcessedImage[]
       // If there was a video, mark any same-named video file as used
       if (extracted.video) {
         const base = stripExt(f.name).toLowerCase();
-        videoFiles.forEach((v, idx) => {
-          if (stripExt(v.name).toLowerCase() === base) matchedVideos.add(idx);
-        });
+        const m = matchLiveVideo(base, videoFiles, matchedVideos);
+        if (m !== -1) matchedVideos.add(m);
       }
     } else {
       remainingImages.push(f);
@@ -210,21 +337,32 @@ export async function processImageFiles(files: File[]): Promise<ProcessedImage[]
 
     let matchedVideo: File | null = null;
     let matchedIdx = -1;
-    for (let i = 0; i < videoFiles.length; i++) {
-      if (matchedVideos.has(i)) continue;
-      if (stripExt(videoFiles[i].name).toLowerCase() === base) {
-        matchedVideo = videoFiles[i];
-        matchedIdx = i;
-        break;
-      }
+    const matchedIdx2 = matchLiveVideo(base, videoFiles, matchedVideos);
+    if (matchedIdx2 !== -1) {
+      matchedVideo = videoFiles[matchedIdx2];
+      matchedIdx = matchedIdx2;
     }
     if (matchedIdx !== -1) matchedVideos.add(matchedIdx);
 
     results.push({ file: normalized, preview, livePhotoVideo: matchedVideo });
   }
 
-  // 3. Third pass: leftover videos that had no image — ignore (or could pair with next unmatched image)
-  // (Deliberately skipped: without a clear image to pair with, dropping is safer.)
+  // 3. Third pass: leftover videos that had no matching image →
+  //    convert into their own live-photo item (extract a cover frame).
+  for (let i = 0; i < videoFiles.length; i++) {
+    if (matchedVideos.has(i)) continue;
+    const vf = videoFiles[i];
+    try {
+      const coverUrl = await extractVideoCover(vf, 0);
+      if (coverUrl) {
+        const blob = await (await fetch(coverUrl)).blob();
+        const coverFile = new File([blob], stripExt(vf.name) + ".jpg", { type: "image/jpeg" });
+        results.push({ file: coverFile, preview: coverUrl, livePhotoVideo: vf });
+      }
+    } catch {
+      // 封面帧提取失败：忽略该视频
+    }
+  }
 
   return results;
 }

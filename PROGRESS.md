@@ -6,6 +6,41 @@
 
 ## 已完成工作
 
+### 本次会话（键盘控制 / 图文相册 / GIF 评论 / 主题遮罩 / 头像统一）
+- **键盘控制增强** — 新增 `src/lib/keyboard.ts`（`isEditableTarget` + `isComposingEvent`）
+  - 评论/搜索输入时方向键不再误触图文/视频控制（contentEditable 聚焦或中文输入法组合中自动跳过）
+  - 视频播放器：方向键由「切换上/下一个视频」改为「快退 5 秒 / 快进 5 秒」，新增 A/D 键同效（控制栏原生上一个/下一个按钮保留）
+  - 图文播放器：左右切换新增 A/D 键
+- **图文相册式左右平移** — 重构 ImageCarousel 切换机制
+  - 横向轨道布局：当前页 + 前后相邻页（循环）三页并排常驻，切换不再反复挂载/卸载，消除黑屏闪烁
+  - 鼠标左键按住拖动实时跟手平移（PC + 移动端 Pointer 事件统一），能看到当前页后半 + 相邻页前半并排
+  - 松手超过 1/4 页宽滑入相邻页（头尾循环），否则回弹；无位移的点击仍正常播放/暂停
+  - 进度条/左右按钮/方向键/A-D/自动轮播统一走同一滑动动画
+  - 每页独立高斯模糊背景随图一起平移，`overflow-hidden` 裁剪避免相邻页模糊串色
+  - 预加载窗口：预览当前图时提前加载前后各 2 张（共 4 张）图片；实况视频数据预加载（隐藏 video 缓冲、不播放、仍显示封面），切到实况时立即就绪
+  - 自动轮播与手动切换分离：自动推进不暂停、进度从 0 续播；手动切换（按键/拖拽/按钮/进度条）暂停并满进度显示
+- **评论 GIF 粘贴上传** — 修复粘贴 GIF 无法发送
+  - 原根因：`handlePaste` 定义了但未绑定 `onPaste`，浏览器把 `<img>` 直接插入 contentEditable 而 `hasContent()` 只查文本 → 发送键禁用
+  - 绑定 `onPaste`：拦截图片文件（含 GIF）转预览图；兼容粘贴图片 URL（HTML `<img>` / uri-list / 纯文本链接自动下载）
+  - `hasContent()`/`canReply()` 识别嵌入 `<img>`；提交时兜底收集嵌入图片上传
+  - GIF 不走 canvas 压缩（会破坏动画），超 8MB 提示更换；其他格式保持压缩
+- **评论图片等比显示** — `comment-images.tsx` 去掉固定宽高比 + object-cover 裁切，改为等比完整显示（单图 object-contain、多图网格高度自适应），GIF 动图不再被裁
+- **评论输入框增高** — 主评论框 min-height 40px→66px（2.5 行），回复框 32px→62px，可看到下一行文字
+- **头像颜色统一** — 新增 `src/lib/avatar.ts`（`avatarColorFor()` 共享 hash 算法 + 色板）
+  - 替换所有硬编码粉色头像：评论区（评论/回复）、视频作者位置、管理面板用户列表、个人中心、公共主页、头像菜单、视频卡片
+  - 同一用户名在所有位置颜色一致
+- **相关推荐作者头像** — `recommendations.tsx` 作者名前增加 20px 圆形头像，`items-start` 顶部对齐
+- **深浅模式圆形遮罩扩散动画** — 重构 `theme-provider.tsx`
+  - 点击切换按钮时从按钮位置生成纯色圆（#fff/#09090b），恒定速度向四周扩散覆盖全屏
+  - 圆放 `z-index:-1` 背景层，只遮 body 背景所在的空白/骨架区域，卡片/按钮/视频/文字不被遮挡
+  - 圆中圆：扩散中途再点切换，生成相反颜色圆叠在上面同速扩散，最上层定最终色；`.dark` 只按最上层切换一次
+  - 背景扩散完成后给文字/UI 加 `theme-text-fade` 渐变（0.35s），多次切换只以最后一次颜色为准
+  - 移除旧 `.dark-transition` 整页渐变及其死代码 CSS
+- **移动端进度条常驻 + 控制栏水托荷叶** — 重构图文控制栏布局
+  - 进度条从控制栏独立出来，始终显示在屏幕底部
+  - 控制栏用 grid 行高 0fr↔1fr 动画：隐藏时高度 0 落底，显示时从底部向上生长升起（桌面 group-hover / 移动端单击），隐藏时反向落下
+  - 控制栏升起把进度条托上去，落下时进度条落回底部，无重复进度条
+
 ### 基础框架
 - Next.js 16 + TypeScript 项目搭建
 - Tailwind CSS v4 配置
@@ -383,10 +418,15 @@
   - 阶段机：`static-preview → live-fade-in → live-fade-out → static-preview`，用链式定时器 + epoch 守卫推进
   - 单图实况 loop 循环重播：`liveRestartTick` 信号（currentIndex 不变时 React 不重渲染，用独立计数器触发重跑）
   - 实况结束用 React 原生 `onEnded={handleLiveEnded}`（避免 effect addEventListener 绑定时机竞态导致不触发）
+  - 视频仅在 fade 阶段挂载（`liveFadeVisible`），避免 GPU 合成层遮挡封面
   - **已解决**：半透明重叠交叉淡化已实现（见下方「实况半透明重叠交叉淡化」）
 
 ### 实况半透明重叠交叉淡化（本次会话新增，已解决）
 - **需求** — 实况图播放流程：预览 1s 封面帧 → 封面/实况 0.8s 半透明重叠交叉淡化 → 实况完整播放 → 实况/封面 0.8s 交叉淡化 → 预览 1s → 循环。关键：过渡时两幅画面**同时在画面中、均半透明、像素级互相混合**
+- **踩坑过程（记录供参考）**：
+  - 最初用「层叠反转」：封面 `<img>` 在顶层（`will-change: transform` + `backface-visibility: hidden` 强制独立合成层）opacity 1↔0 淡出淡入、视频在底层。实测 Edge 下**即使封面 computed opacity=0，独立合成层仍遮挡下方 canvas**，导致实况看不到、只剩模糊背景
+  - 改用「双元素 opacity 交叉淡化」：canvas 镜像视频 + 封面 `<img>` 同时过渡。仍失败——但控制台诊断（`elementFromPoint`、`getComputedStyle`）发现关键线索：canvas 用 `relative z-10` 时不可见，改用 `absolute inset-0` 后立即可见 → **真正根因是布局（文档流）问题：`relative` 元素不脱离文档流，canvas 被挤到容器下方（y=441 之外），被外层 `overflow-hidden` 裁掉**，与合成层无关
+  - **根因结论**：之前所有"GPU 合成层遮挡"判断被带偏，实际是定位方式错误（应为 `absolute`）
 - **最终方案（单 canvas 像素级混合）**：
   - 真 `<video>` `opacity:0` + `absolute inset-0` 隐藏，仅作 canvas 帧源（继续硬件解码、驱动 `onEnded`/进度条/首帧读取）
   - 新增 `<canvas>` `absolute inset-0`，`requestAnimationFrame` 逐帧 `drawImage` 镜像视频帧；同一画布里用 `globalAlpha` 同时绘制「封面帧（`1-fade`）+ 实况帧（`fade`）」，实现真正的像素级半透明交叉淡化，**不依赖任何元素层叠关系**
@@ -415,7 +455,8 @@
 - **ThemeProvider 接入 Session** — 从 `SessionProvider` 外层移入内层，`useSession()` 拿 userId：登录用户主题存数据库（跨设备/刷新恢复），未登录 fallback localStorage；登录后异步覆盖本地值，保证即时渲染与防白闪一致
 
 ### 模糊背景纯黑修复（本次会话）
-- **修复** — 图文模糊背景 `<img>` 移除 `loading="lazy"`（动态挂载、初始透明的层里浏览器懒加载 IntersectionObserver 判断不可靠 → 背景图不加载 → 露出底下 `bg-black` 纯黑），改为与封面一致的 eager 加载（同一 URL 已在缓存无额外开销）
+- **根因** — 图文模糊背景 `<img>` 带 `loading="lazy"`，挂在动态挂载、初始透明（opacity:0）的 `AnimatePresence` 层里，浏览器懒加载 IntersectionObserver 判断不可靠 → 背景图不加载 → 露出底下 `bg-black`（纯黑）；与封面同一 URL，封面能加载证明非限流/网络问题
+- **修复** — 移除模糊背景 img 的 `loading="lazy"`（与封面一致的 eager 加载，同一 URL 已在缓存无额外开销）
 
 ### 输入框适配 + 输入长度限制（本次会话）
 - **输入框滚动条适配深色模式** — `globals.css` 为所有 `textarea` / `input` / `[contenteditable="true"]` 添加统一滚动条样式（滑块 `#d4d4d8`/`#52525b`，轨道 `#f4f4f5`/`#27272a`），覆盖评论区、标题、简介、搜索框等

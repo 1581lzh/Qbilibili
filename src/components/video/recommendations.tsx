@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { optimizedCover } from "@/lib/image";
 import { cachedFetch } from "@/lib/fetch-cache";
 import { setAutoPlayVideo } from "@/lib/signals";
+import { avatarColorFor } from "@/lib/avatar";
 
 interface Video {
   id: string;
@@ -61,9 +62,14 @@ export default function Recommendations({ currentVideoId }: { currentVideoId: st
             <h3 className="line-clamp-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">
               {v.title}
             </h3>
-            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-              {v.author.name}
-            </p>
+            <div className="mt-1 flex items-start gap-1.5">
+              <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${avatarColorFor(v.author.name)}`}>
+                {v.author.name?.[0] || "U"}
+              </div>
+              <p className="truncate text-xs leading-5 text-zinc-500 dark:text-zinc-400">
+                {v.author.name}
+              </p>
+            </div>
           </div>
         </motion.a>
       ))}

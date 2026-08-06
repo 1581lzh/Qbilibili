@@ -100,21 +100,21 @@ H:\bilibili/
 │   │   ├── layout/            # 布局组件
 │   │   │   └── header.tsx     # 页头组件（移动端搜索展开动画/深色切换/头像菜单）
 │   │   ├── providers.tsx      # 全局 Provider（AuthModal 通过 next/dynamic 懒加载）
-│   │   ├── theme-provider.tsx # 深色模式 Provider（light/dark/system）
+│   │   ├── theme-provider.tsx # 深色模式 Provider（light/dark/system + 圆形遮罩扩散动画（背景层圆+圆中圆+文字单独渐变））
 │   │   ├── upload/            # 投稿相关组件
 │   │   │   ├── video-upload.tsx        # 视频投稿组件（左右布局：视频预览+表单）
 │   │   │   ├── image-text-upload.tsx   # 图文投稿组件（左右布局：大预览+瀑布流缩略图+编辑模式）
 │   │   │   └── music-player.tsx        # 音乐播放器组件
 │   │   └── video/             # 视频相关组件
 │   │       ├── video-card.tsx             # 视频卡片（同名同色头像）
-│   │       ├── video-player.tsx           # 视频播放器（Aliplayer + 空格键暂停/播放）
-│   │       ├── video-play-section.tsx     # 播放区域（含图片轮播组件，支持图文播放，播放模式切换（循环/单次/自动连播），PC 单击暂停 + 移动端双击暂停，底部图片进度条（点击跳转+悬停加粗），音量控制（静音+滑块），中心蒙版动画，移动端单击切换控制栏）
+│   │       ├── video-player.tsx           # 视频播放器（Aliplayer + 空格暂停 + 方向键/A-D 快退快进 5 秒）
+│   │       ├── video-play-section.tsx     # 播放区域（含图片轮播组件：相册式左右平移轨道（鼠标/触摸拖动+循环）、预加载窗口（前后2张图片+实况视频数据）、播放模式切换（循环/单次/自动连播）、底部图片进度条（始终显示，控制栏 0fr↔1fr 水托荷叶动画）、音量控制、中心蒙版动画、PC单击+移动端双击暂停）
 │   │       ├── video-like-button.tsx      # 点赞按钮（乐观更新，即时响应）
 │   │       ├── video-favorite-button.tsx  # 收藏按钮（乐观更新，即时响应）
 │   │       ├── video-delete-button.tsx    # 删除视频按钮
-│   │       ├── recommendations.tsx        # 推荐列表（cachedFetch 客户端缓存）
-│   │       ├── comment-section.tsx        # 评论区（图片附件 + 乐观更新 + 回车发送）
-│   │       ├── comment-images.tsx         # 评论图片展示组件（单图/多图布局）
+│   │       ├── recommendations.tsx        # 推荐列表（cachedFetch 客户端缓存 + 作者头像）
+│   │       ├── comment-section.tsx        # 评论区（图片/GIF 粘贴上传 + 乐观更新 + 回车发送 + 2.5行输入框）
+│   │       ├── comment-images.tsx         # 评论图片展示组件（等比显示不裁切）
 │   │       └── image-lightbox.tsx         # 图片灯箱组件（全屏查看 + 键盘导航）
 │   ├── lib/                   # 工具函数
 │   │   ├── auth.ts            # NextAuth 配置 + getSession() 安全封装
@@ -139,6 +139,8 @@ H:\bilibili/
 │   │   ├── audio-queue.ts     # 音频处理异步队列（内存队列 + Worker，5秒轮询）
 │   │   ├── emoji.ts           # Emoji 工具函数（Unicode emoji 解析 + 抖音表情包匹配）
 │   │   ├── emoji-data.ts      # Unicode emoji 分类数据（按类别组织的 emoji 列表）
+│   │   ├── avatar.ts          # 头像颜色共享模块（avatarColorFor()，按用户名哈希生成统一头像色）
+│   │   ├── keyboard.ts        # 键盘控制守卫（isEditableTarget + isComposingEvent，输入态自动解除快捷键）
 │   │   └── douyin-emoji-data.ts # 抖音表情包数据（214个表情，名称+图片映射）
 │   ├── instrumentation.ts     # 服务器启动时初始化音频队列处理器
 │   ├── types/                 # TypeScript 类型定义
@@ -580,7 +582,7 @@ sudo firewall-cmd --reload
 33. **毛玻璃效果** — 下拉菜单 `backdrop-blur-xl` 直接模糊页面内容，弹窗遮罩分离模糊层与内容层（blur 静态 + opacity GPU 动画）
 34. **评论图片附件** — 每条评论最多 7 张图片，文字可选；单图 4:3 大图，多图 1:1 方形缩略图网格；PC 端 4 列，移动端 3 列 + 溢出 "+N" 标记；全屏灯箱查看原图（键盘导航、ESC 关闭）
 35. **图文播放优化** — 播放/暂停图标正确显示（暂停显示▶，播放显示⏸）；浏览器阻止自动播放时自动降级到暂停状态，用户交互后恢复
-36. **音频响度标准化** — 上传视频后自动使用 FFmpeg loudnorm（EBU R128，-24 LUFS）标准化音频响度，支持 OSS 和 VOD 两种视频来源，异步队列处理，非阻塞播放；启动时自动回填未处理的旧视频
+36. **音频响度标准化** — 上传视频后自动使用 FFmpeg loudnorm（EBU R128，-14 LUFS）标准化音频响度，支持 OSS 和 VOD 两种视频来源，异步队列处理，非阻塞播放；启动时自动回填未处理的旧视频
 37. **Emoji 支持** — 评论/投稿支持 Unicode emoji 和抖音表情包，emoji 选择器面板（分类浏览 + 搜索），contentEditable 实时预览 emoji 图片，抖音表情包 214 个（存储在 public/emoji/douyin/），B站格式兼容（`:表情名:`语法）
 38. **实况照片（Live Photo）支持** — 图文投稿支持实况照片，播放时像抖音一样自动静音播放实况视频，播完继续轮播
   - **多格式解析**（`src/lib/live-photo.ts`）：
@@ -590,7 +592,7 @@ sudo firewall-cmd --reload
   - **存储**：Video 表新增 `livePhotoVideos` 字段（JSON 数组，与 imageUrls 一一对应，`""` 表示静态图），实况视频段以 video 类型上传 OSS
   - **播放**：轮播到实况图自动静音播放视频，对应进度条一节显示视频实时进度（timeupdate 驱动，非倒计时）；视频完整播完后再切下一张，融入轮播节奏；背景音乐保持正常播放（仅视频静音）
   - **播放阶段机**：实况图播放流程为 `static-preview（1s封面）→ live-fade-in（交叉淡化）→ 视频播放 → live-fade-out（交叉淡化）→ static-preview（1s封面）→ 循环`。用链式定时器 + epoch 守卫推进；单图 loop 用 `liveRestartTick` 信号触发重播（currentIndex 不变时 React 不重渲染）；实况结束用 React 原生 `onEnded` 绑定
-  - **渲染实现（单 canvas 像素级混合）**：真 `<video>` `opacity:0` + `absolute inset-0` 隐藏仅作帧源（继续硬件解码、驱动 `onEnded`/进度条/首帧），新增 `<canvas>` `absolute inset-0` 用 `requestAnimationFrame` 逐帧 `drawImage` 镜像视频；同一画布里用 `globalAlpha` 同时绘制「封面帧（`1-fade`）+ 实况帧（`fade`）」实现像素级半透明交叉淡化，不依赖任何元素层叠关系。封面 `<img>` 常驻渲染并置于 canvas 下方（`z-11` < canvas `z-12`），作为 canvas 首帧绘制前的无缝底衬（消除淡入空档闪烁）；封面帧用 `Image` 对象绘制（同 URL 走缓存），`drawImage` 按 `object-contain` 等比缩放居中（`Math.min`）。淡入淡出用 `easeInOutQuad` 缓动（`liveFadeRef` + `fadeAnimRef`），首帧 `loadeddata` 后再淡入、1.5s 兜底防卡死
+  - **渲染实现（单 canvas 像素级混合）**：真 `<video>` `opacity:0` + `absolute inset-0` 隐藏仅作帧源（继续硬件解码、驱动 `onEnded`/进度条/首帧），新增 `<canvas>` `absolute inset-0` 用 `requestAnimationFrame` 逐帧 `drawImage` 镜像视频；同一画布里用 `globalAlpha` 同时绘制「封面帧（`1-fade`）+ 实况帧（`fade`）」实现像素级半透明交叉淡化，不依赖任何元素层叠关系。封面 `<img>` 常驻渲染并置于 canvas 下方（`z-11` < canvas `z-12`），作为 canvas 首帧绘制前的无缝底衬（消除淡入空档闪烁）；封面帧用 `Image` 对象绘制（同 URL 走缓存），`drawImage` 按 `object-contain` 等比缩放居中（`Math.min`）。淡入淡出用 `easeInOutQuad` 缓动（`liveFadeRef` + `fadeAnimRef`），首帧 `loadeddata` 后再淡入、1.5s 兜底防卡死。**踩坑记录**：canvas 必须用 `absolute inset-0`（`relative` 不脱离文档流会被挤到容器外裁掉）；Edge 下 `opacity:0` 的独立合成层（`will-change` 等）仍会遮挡下方内容，故不可依赖封面 img 层叠做淡化
   - **暂停保留进度原地暂停** — 实况播放中暂停不再跳回封面：阶段机暂停分支 `video.pause()` 原地冻结画面与进度，恢复时从当前位置续播（恰好在播完淡出时刻暂停则重新淡入从头播）；独立播放 effect 加 `isPlaying` 守卫，元数据/进度监听拆独立 effect 驱动
   - **时长分配**：自动模式下静态图时长 = `(总音频时长 - 实况视频总时长) / 静态图数`，实况图 = 视频完整时长，避免有的长有的短
   - **封面**：实况只能用静态帧（图片本身）做封面，不提供动图封面
@@ -660,10 +662,10 @@ sudo firewall-cmd --reload
 - **样式统一** — 子评论与父评论使用相同的字体大小和图标尺寸
 - **评论图片附件** — Comment 模型 `images` 字段存储 JSON 序列化的图片 URL 数组（SQLite 适配），最多 7 张
   - 上传流程：前端并行上传图片到 `/api/upload`（type=image），收集 OSS URL 随评论一起提交
-  - 图片选择：支持文件选择器和 Ctrl+V 粘贴上传
-  - 图片压缩：超过 8MB 自动压缩（Canvas API），压缩后仍超限则提示用户
-  - 单图布局：4:3 比例，max-width 280px，悬停显示放大图标
-  - 多图布局：1:1 方形缩略图网格，PC 端 4 列，移动端 3 列
+  - 图片选择：支持文件选择器、Ctrl+V 粘贴上传、粘贴图片 URL（HTML `<img>`/uri-list/纯文本链接自动下载）
+  - 图片压缩：超过 8MB 自动压缩（Canvas API），压缩后仍超限则提示用户；**GIF 不压缩**（canvas 压缩会破坏动画，超限直接提示更换）
+  - 单图布局：等比显示（`object-contain`，max-width 280px / max-height 240px），悬停显示放大图标，不裁切（GIF 动图完整显示）
+  - 多图布局：网格列宽固定、高度自适应（`h-auto w-full`），PC 端 4 列，移动端 3 列
   - 移动端溢出：第 4-7 张隐藏，最后一张显示 "+N" 标记
   - 灯箱组件：全屏查看原图，键盘左右箭头切换，ESC 关闭，遮罩点击关闭
   - 灯箱缩放：鼠标滚轮缩放，+/- 按钮缩放，键盘 +/- 快捷键，双击切换缩放，拖拽平移，移动端双指捏合缩放
@@ -679,7 +681,7 @@ sudo firewall-cmd --reload
 - **事件监听器管理** — click/touchend 监听器通过变量保存引用，在 useEffect cleanup 中正确移除，避免视频切换时监听器叠加
 - **播放/暂停中心动画** — 自建 `.bili-anim` overlay div（不依赖 Aliplayer 内部 `.prism-animation`），监听 `player.on('play')`/`player.on('pause')` 事件触发弹性缩放动画（0.7s ease-out，18vw/18vh 响应尺寸）
 - **PlaylistComponent 播放列表组件** — 阿里云官方组件（不提供 CDN），从 GitHub 下载 `aliplayercomponents-1.1.7.min.js` 放到 `public/lib/`。通过 `components` 配置注册，初始化时通过 `args: [playlist]` 传入播放列表。控制条添加上一个/播放列表/下一个按钮，列表按钮通过 CSS 隐藏
-- **视频切换** — 上一个/下一个按钮使用 lucide-react 的 SkipBack/SkipForward 图标（通过 createRoot 渲染），控件栏重排（上一个→播放/暂停→下一个），隐藏播放列表按钮。tooltip 通过 mouseenter/mouseleave 事件绑定 `.visible` class 切换。切换逻辑：fetch detail API + replaceState + onVideoChange 回调
+- **视频切换** — 上一个/下一个按钮使用 lucide-react 的 SkipBack/SkipForward 图标（通过 createRoot 渲染），控件栏重排（上一个→播放/暂停→下一个），隐藏播放列表按钮。tooltip 通过 mouseenter/mouseleave 事件绑定 `.visible` class 切换。切换逻辑：fetch detail API + replaceState + onVideoChange 回调（键盘方向键已改为快退/快进 5 秒，不再触发视频切换，见「键盘控制」章节）
 - **VideoPlaySection 状态管理** — 使用 `useReducer` 管理视频播放页的客户端状态（`VideoState` 接口 + `VideoAction` 联合类型），包括当前视频、导航 ID、点赞/收藏计数。`onVideoChange` 回调通过 `dispatch({ type: "NAVIGATE", video })` 统一更新，替代原来的 8 个独立 `useState` setter 调用
 - **VOD playAuth 缓存** — `src/lib/vod-cache.ts` 模块级 `Map` 缓存 VOD 播放凭证（60 秒 TTL），避免重复 API 请求。模块导出 `getVodPlayAuth(vodVideoId)` 函数，`video-player.tsx` 初始化播放器时调用
 - **点击自动播放**：从视频卡片（首页/个人中心/推荐列表）点击进入播放页时，通过类型安全的 sessionStorage 信号工具（`setAutoPlayVideo`/`consumeAutoPlayVideo`）传递自动播放标记，播放器检测到标记后自动非静音播放，播放后立即清除标记
@@ -769,8 +771,29 @@ sudo firewall-cmd --reload
 - 收藏/取消收藏时实时更新数量（setCount）
 
 ### 头像颜色
-- Header、个人主页、视频卡片统一使用**用户名**计算头像颜色
+- Header、个人主页、视频卡片、评论区（评论/回复）、视频作者位置、管理面板、公共主页、推荐列表统一使用**用户名**哈希计算头像颜色
+- 共享模块 `src/lib/avatar.ts` 导出 `avatarColorFor(name)`（同一 hash 算法 + 色板），保证同名用户在所有位置颜色一致
 - 改名后头像颜色自动同步变化
+
+### 键盘控制（输入态守卫 + A/D 快捷键）
+- 共享守卫 `src/lib/keyboard.ts`：`isEditableTarget(e)`（焦点在 input/textarea/contentEditable 时返回 true）、`isComposingEvent(e)`（中文输入法组合中返回 true）
+- 所有全局键盘监听（视频/图文播放器）先调用守卫，焦点在输入框或输入法组合中时**不拦截**，保证评论区/搜索框方向键正常移动光标
+- 视频播放器：方向键从「切换上/下一个视频」改为「快退 5 秒 / 快进 5 秒」（`getDuration()`/`currentTime()` 计算目标时间 + `seek()`），`A`/`D` 键同效；空格播放/暂停；控制栏 PlaylistComponent 原生上一个/下一个按钮保留
+- 图文播放器：`←`/`A` 上一张、`→`/`D` 下一张
+
+### 图文相册式左右平移（ImageCarousel）
+- **横向轨道布局**：当前页 + 前后相邻页（循环）三页 `flex` 并排，轨道 `translateX(calc(-100% + dragX))`；切换只更新 `currentIndex` 并复位轨道（内容已换，视觉无缝），三页常驻消除挂载/卸载闪烁
+- **拖拽**：Pointer 事件统一处理鼠标左键与触摸，`dragX` 实时跟手；松手 `settleDrag` 超过 1/4 页宽滑入相邻页（`nextIndexRef`/`prevIndexRef` 循环），否则回弹；无位移的点击仍触发播放/暂停（触摸双击/单击逻辑保留）
+- **预加载窗口**：`PREFETCH_RANGE=2`，预览当前图时用 `new Image()` 预加载前后各 2 张图片（主图与模糊背景同 URL 一次就绪）；实况视频用隐藏 `<video preload="auto" muted>` 仅缓冲数据不播放（非预览状态仍显示封面），切到实况时立即就绪
+- **每页独立模糊背景**：模糊 `<img>` 与清晰主图在同一页面容器内一起平移，`overflow-hidden` 裁剪 `scale-110 + blur-60px` 扩散避免串色
+- **手动/自动分离**：`slideBy(dir, manual)` —— 自动轮播传 `false`（不暂停、进度从 0 续播），按键/拖拽/按钮/进度条传 `true`（暂停并满进度显示），修复自动轮播被误判为手动切换导致进度条瞬间满的问题
+- **控制栏水托荷叶**：进度条独立常驻屏幕底部；控制栏用 grid 行高 `0fr↔1fr` 过渡（`transition-[grid-template-rows]`）实现从底部升起/落下，`overflow-hidden` 内层折叠
+
+### 深浅模式圆形遮罩扩散
+- 点击切换按钮 → 在按钮位置生成纯色圆（目标主题 body 背景色 `#fff` / `#09090b`），`z-index:-1` 背景层，只遮空白/骨架区域，不遮挡卡片/按钮/视频/文字
+- rAF 恒定速度（2200px/s）扩散，`scale(currentR/radius)` 从 0→1；圆基准尺寸 `radius*2`（注意不能设 0 尺寸，否则放大不可见）
+- 圆中圆：中途再点生成相反颜色圆叠在上面（数组尾 = 最上层），同速扩散；最上层圆覆盖全屏时一次性切换 `.dark`（只按最后一次颜色切一次）
+- 背景完成后给根元素加 `theme-text-fade`（globals.css，0.35s 颜色/边框过渡）让文字/UI 单独渐变；圆保留 400ms 再移除避免背景切换瞬间闪烁
 
 ### 阿里云 SDK 相关
 - **Aliplayer 播放器 CDN**（2.16.3+ 路径变更）：`https://g.alicdn.com/apsara-media-box/imp-web-player/{版本号}/`

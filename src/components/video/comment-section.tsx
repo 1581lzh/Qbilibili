@@ -11,6 +11,7 @@ import { compressImage, formatFileSize } from "@/lib/image-compress";
 import EmojiPicker from "@/components/ui/emoji-picker";
 import { insertHtmlAtCursor, getContentEditableText, clearContentEditable } from "@/lib/emoji";
 import { renderEmojiText } from "@/lib/emoji-data";
+import { avatarColorFor } from "@/lib/avatar";
 
 interface Author {
   id: string;
@@ -134,10 +135,66 @@ export default function CommentSection({ videoId }: { videoId: string }) {
   const MAX_FILE_SIZE = 8 * 1024 * 1024; // 8MB
   const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 
+  const extractImageUrlsFromClipboard = (data: DataTransfer): string[] => {
+    const urls: string[] = [];
+    const html = data.getData("text/html") || "";
+    const imgRegex = /<img[^>]+src=["']([^"']+)["']/gi;
+    let m: RegExpExecArray | null;
+    while ((m = imgRegex.exec(html)) !== null) {
+      urls.push(m[1]);
+    }
+    const uriList = data.getData("text/uri-list") || "";
+    uriList.split("\n").forEach((line) => {
+      const t = line.trim();
+      if (t && !t.startsWith("#")) urls.push(t);
+    });
+    const plain = data.getData("text/plain") || "";
+    if (urls.length === 0 && plain) {
+      const t = plain.trim();
+      if (/^https?:\/\/.+\.(gif|png|jpe?g|webp)(\?.*)?$/i.test(t)) urls.push(t);
+    }
+    return urls;
+  };
+
+  const imageUrlToFile = async (url: string): Promise<File | null> => {
+    try {
+      const res = await fetch(url, { mode: "cors" });
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      if (!blob.type.startsWith("image/")) return null;
+      const ext = (blob.type.split("/")[1] || "png").replace("jpeg", "jpg");
+      return new File([blob], `pasted-${Date.now()}.${ext}`, { type: blob.type });
+    } catch {
+      return null;
+    }
+  };
+
+  const collectEmbeddedImages = async (ref: React.RefObject<HTMLDivElement | null>): Promise<File[]> => {
+    const el = ref.current;
+    if (!el) return [];
+    const imgs = Array.from(el.querySelectorAll("img"));
+    if (imgs.length === 0) return [];
+    const files: File[] = [];
+    for (const img of imgs) {
+      const file = await imageUrlToFile(img.src);
+      if (file) files.push(file);
+    }
+    return files;
+  };
+
   const processImageFile = async (file: File): Promise<File | null> => {
     if (!ALLOWED_TYPES.includes(file.type)) {
       alert(`${file.name} 格式不支持`);
       return null;
+    }
+
+    if (file.type === "image/gif") {
+      // GIF 压缩会丢失动画，超过 8MB 限制时提示用户
+      if (file.size > MAX_FILE_SIZE) {
+        alert(`${file.name} 超过8MB限制（${formatFileSize(file.size)}），请使用更小的GIF`);
+        return null;
+      }
+      return file;
     }
 
     if (file.size > MAX_FILE_SIZE) {
@@ -196,7 +253,30 @@ export default function CommentSection({ videoId }: { videoId: string }) {
         .map((item) => item.getAsFile())
         .filter((file): file is File => file !== null);
 
-      if (imageFiles.length === 0) return;
+      if (imageFiles.length === 0) {
+        // 可能是复制的图片 URL（如 GIF 网站），尝试识别并下载为图片文件
+        const urls = extractImageUrlsFromClipboard(e.clipboardData);
+        if (urls.length === 0) return;
+        e.preventDefault();
+        const fetched: File[] = [];
+        for (const url of urls) {
+          const f = await imageUrlToFile(url);
+          if (f) fetched.push(f);
+        }
+        if (fetched.length === 0) return;
+        const remaining = MAX_IMAGES - selectedImages.length;
+        const filesToProcess = fetched.slice(0, remaining);
+        const processedFiles: File[] = [];
+        for (const file of filesToProcess) {
+          const processed = await processImageFile(file);
+          if (processed) processedFiles.push(processed);
+        }
+        if (processedFiles.length > 0) {
+          setSelectedImages((prev) => [...prev, ...processedFiles]);
+          setImagePreviews((prev) => [...prev, ...processedFiles.map((f) => URL.createObjectURL(f))]);
+        }
+        return;
+      }
 
       e.preventDefault();
 
@@ -255,7 +335,29 @@ export default function CommentSection({ videoId }: { videoId: string }) {
         .map((item) => item.getAsFile())
         .filter((file): file is File => file !== null);
 
-      if (imageFiles.length === 0) return;
+      if (imageFiles.length === 0) {
+        const urls = extractImageUrlsFromClipboard(e.clipboardData);
+        if (urls.length === 0) return;
+        e.preventDefault();
+        const fetched: File[] = [];
+        for (const url of urls) {
+          const f = await imageUrlToFile(url);
+          if (f) fetched.push(f);
+        }
+        if (fetched.length === 0) return;
+        const remaining = MAX_IMAGES - replySelectedImages.length;
+        const filesToProcess = fetched.slice(0, remaining);
+        const processedFiles: File[] = [];
+        for (const file of filesToProcess) {
+          const processed = await processImageFile(file);
+          if (processed) processedFiles.push(processed);
+        }
+        if (processedFiles.length > 0) {
+          setReplySelectedImages((prev) => [...prev, ...processedFiles]);
+          setReplyImagePreviews((prev) => [...prev, ...processedFiles.map((f) => URL.createObjectURL(f))]);
+        }
+        return;
+      }
 
       e.preventDefault();
 
@@ -360,9 +462,9 @@ export default function CommentSection({ videoId }: { videoId: string }) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const currentContent = getContentEditableText(textareaRef);
-    if ((!currentContent.trim() && selectedImages.length === 0) || loading) return;
+    if ((!currentContent.trim() && selectedImages.length === 0 && !textareaRef.current?.querySelector("img")) || loading) return;
     const input = currentContent;
-    const tempImages = [...selectedImages];
+    const tempImages = [...selectedImages, ...(await collectEmbeddedImages(textareaRef))];
     const tempId = `temp-${Date.now()}`;
     const tempComment: Comment = {
       id: tempId,
@@ -426,9 +528,9 @@ export default function CommentSection({ videoId }: { videoId: string }) {
 
   const handleReply = async (parentId: string) => {
     const currentReplyContent = getContentEditableText(replyTextareaRef);
-    if ((!currentReplyContent.trim() && replySelectedImages.length === 0) || replyLoading) return;
+    if ((!currentReplyContent.trim() && replySelectedImages.length === 0 && !replyTextareaRef.current?.querySelector("img")) || replyLoading) return;
     const input = currentReplyContent;
-    const tempImages = [...replySelectedImages];
+    const tempImages = [...replySelectedImages, ...(await collectEmbeddedImages(replyTextareaRef))];
     const targetName = replyTargetName;
 
     // Find parent comment content and images for the reply preview
@@ -625,7 +727,7 @@ export default function CommentSection({ videoId }: { videoId: string }) {
       <div key={reply.id} id={`comment-${reply.id}`} className={isIndented ? "ml-6 sm:ml-10" : ""}>
         <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800 sm:p-4">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#FB7299] text-xs font-medium text-white">
+            <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium text-white ${avatarColorFor(reply.author.name)}`}>
               {reply.author.name[0]}
             </div>
             <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
@@ -698,6 +800,7 @@ export default function CommentSection({ videoId }: { videoId: string }) {
                 ref={replyTextareaRef}
                 contentEditable
                 data-placeholder={`回复 @${replyTargetName}`}
+                onPaste={handleReplyPaste}
                 onInput={(e) => {
                   const text = e.currentTarget.textContent || "";
                   setReplyContent(text);
@@ -708,7 +811,7 @@ export default function CommentSection({ videoId }: { videoId: string }) {
                     handleReply(reply.id);
                   }
                 }}
-                className="max-h-[80px] min-h-[32px] w-full overflow-y-auto px-3 pt-2 pb-1 text-sm text-zinc-900 focus:outline-none dark:text-zinc-100 [&:empty]:before:pointer-events-none [&:empty]:before:text-zinc-400 [&:empty]:before:dark:text-zinc-500 [&[data-placeholder]:empty:before]:content-[attr(data-placeholder)]"
+                className="max-h-[80px] min-h-[62px] w-full overflow-y-auto px-3 pt-2 pb-1 text-sm text-zinc-900 focus:outline-none dark:text-zinc-100 [&:empty]:before:pointer-events-none [&:empty]:before:text-zinc-400 [&:empty]:before:dark:text-zinc-500 [&[data-placeholder]:empty:before]:content-[attr(data-placeholder)]"
               />
               {replyImagePreviews.length > 0 && (
                 <div className="flex gap-1.5 px-2.5 pb-2 sm:px-3">
@@ -797,15 +900,17 @@ export default function CommentSection({ videoId }: { videoId: string }) {
     );
   };
 
-  // 检查是否有内容（文本或 emoji 图片）
+  // 检查是否有内容（文本或 emoji 图片或嵌入的 img）
   const hasContent = () => {
     if (!textareaRef.current) return false;
+    if (textareaRef.current.querySelector("img")) return true;
     // 检查是否有文本节点或子元素（img 标签等）
     return textareaRef.current.childNodes.length > 0 && textareaRef.current.textContent?.trim() !== "";
   };
   const canSubmit = hasContent() || selectedImages.length > 0;
   const canReply = () => {
     if (!replyTextareaRef.current) return false;
+    if (replyTextareaRef.current.querySelector("img")) return true;
     return (replyTextareaRef.current.childNodes.length > 0 && replyTextareaRef.current.textContent?.trim() !== "") || replySelectedImages.length > 0;
   };
 
@@ -822,6 +927,7 @@ export default function CommentSection({ videoId }: { videoId: string }) {
               ref={textareaRef}
               contentEditable
               data-placeholder="发一条友善的评论"
+              onPaste={handlePaste}
               onInput={(e) => {
                 // 获取纯文本（不含 img 标签的文本内容）
                 const text = e.currentTarget.textContent || "";
@@ -833,7 +939,7 @@ export default function CommentSection({ videoId }: { videoId: string }) {
                   handleSubmit(e as any);
                 }
               }}
-              className="max-h-[120px] min-h-[40px] w-full overflow-y-auto px-3 pt-3 pb-1 text-sm text-zinc-900 focus:outline-none dark:text-zinc-100 [&:empty]:before:pointer-events-none [&:empty]:before:text-zinc-400 [&:empty]:before:dark:text-zinc-500 [&[data-placeholder]:empty:before]:content-[attr(data-placeholder)]"
+              className="max-h-[120px] min-h-[66px] w-full overflow-y-auto px-3 pt-3 pb-1 text-sm text-zinc-900 focus:outline-none dark:text-zinc-100 [&:empty]:before:pointer-events-none [&:empty]:before:text-zinc-400 [&:empty]:before:dark:text-zinc-500 [&[data-placeholder]:empty:before]:content-[attr(data-placeholder)]"
             />
             {imagePreviews.length > 0 && (
               <div className="flex gap-1.5 px-2.5 pb-2 sm:px-3">
@@ -940,7 +1046,7 @@ export default function CommentSection({ videoId }: { videoId: string }) {
               >
                 <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800 sm:p-4">
                 <div className="flex items-center gap-2">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#FB7299] text-xs font-medium text-white">
+                  <div className={`flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium text-white ${avatarColorFor(comment.author.name)}`}>
                     {comment.author.name[0]}
                   </div>
                   <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
@@ -998,6 +1104,7 @@ export default function CommentSection({ videoId }: { videoId: string }) {
                       ref={replyTextareaRef}
                       contentEditable
                       data-placeholder={`回复 @${replyTargetName}`}
+                      onPaste={handleReplyPaste}
                       onInput={(e) => {
                         const text = e.currentTarget.textContent || "";
                         setReplyContent(text);
@@ -1008,7 +1115,7 @@ export default function CommentSection({ videoId }: { videoId: string }) {
                           handleReply(comment.id);
                         }
                       }}
-                      className="max-h-[80px] min-h-[32px] w-full overflow-y-auto px-3 pt-2 pb-1 text-sm text-zinc-900 focus:outline-none dark:text-zinc-100 [&:empty]:before:pointer-events-none [&:empty]:before:text-zinc-400 [&:empty]:before:dark:text-zinc-500 [&[data-placeholder]:empty:before]:content-[attr(data-placeholder)]"
+                      className="max-h-[80px] min-h-[62px] w-full overflow-y-auto px-3 pt-2 pb-1 text-sm text-zinc-900 focus:outline-none dark:text-zinc-100 [&:empty]:before:pointer-events-none [&:empty]:before:text-zinc-400 [&:empty]:before:dark:text-zinc-500 [&[data-placeholder]:empty:before]:content-[attr(data-placeholder)]"
                     />
                     {replyImagePreviews.length > 0 && (
                       <div className="flex gap-1.5 px-2.5 pb-2 sm:px-3">

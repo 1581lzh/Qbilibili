@@ -5,6 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { optimizedCover } from "@/lib/image";
 import { setAutoPlayVideo } from "@/lib/signals";
+import { avatarColorFor } from "@/lib/avatar";
 
 interface Video {
   id: string;
@@ -14,19 +15,8 @@ interface Video {
   _count: { likes: number; favorites: number };
 }
 
-const AVATAR_COLORS = [
-  "bg-pink-500", "bg-violet-500", "bg-blue-500", "bg-cyan-500",
-  "bg-green-500", "bg-amber-500", "bg-red-500", "bg-indigo-500",
-];
-
 export default function VideoCard({ video, index = 0 }: { video: Video; index?: number }) {
-  const avatarColor = useMemo(() => {
-    let h = 0;
-    for (let i = 0; i < video.author.name.length; i++) {
-      h = video.author.name.charCodeAt(i) + ((h << 5) - h);
-    }
-    return AVATAR_COLORS[Math.abs(h) % AVATAR_COLORS.length];
-  }, [video.author.name]);
+  const avatarColor = useMemo(() => avatarColorFor(video.author.name), [video.author.name]);
 
   return (
     <motion.div
