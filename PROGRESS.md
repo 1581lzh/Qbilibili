@@ -6,6 +6,14 @@
 
 ## 已完成工作
 
+### 本次会话（视频投稿修复）
+- **视频投稿按钮无响应修复** — 修复点击「立即投稿」无反应问题
+  - 根因：`VideoUploadPage` 的提交回调使用 `document.querySelector("form")` 拿到的是 DOM 中第一个 `<form>`，即 Header 顶部搜索框（Header 渲染在投稿页之前），`requestSubmit()` 触发的是搜索表单而非投稿表单 → 看起来"没反应"
+  - 修复：视频投稿改为与图文投稿一致，直接调用 `handleSubmit`（upload/page.tsx）
+- **VOD 上传进度百分比异常修复** — 修复显示 `1917338%` 的荒谬百分比
+  - 根因：`aliyun-upload-sdk` 的 `onUploadProgress` 回调签名是 `(fileInfo, totalBytes, loadedBytes)`，原代码把第二个参数（总字节数，如 1917338 字节）当成百分比直接显示
+  - 修复：按 `loaded / total * 100` 计算真实百分比，并 `Math.min(100, ...)` 封顶（upload/page.tsx）
+
 ### 本次会话（键盘控制 / 图文相册 / GIF 评论 / 主题遮罩 / 头像统一）
 - **键盘控制增强** — 新增 `src/lib/keyboard.ts`（`isEditableTarget` + `isComposingEvent`）
   - 评论/搜索输入时方向键不再误触图文/视频控制（contentEditable 聚焦或中文输入法组合中自动跳过）

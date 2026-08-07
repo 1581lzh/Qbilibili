@@ -273,8 +273,8 @@ export default function UploadPage() {
           onUploadstarted: function (fileInfo: any) {
             uploader.setUploadAuthAndAddress(fileInfo, uploadAuth, uploadAddress, videoId);
           },
-          onUploadProgress: function (_fileInfo: any, _percent: number, _percent2: number, _speed: number) {
-            onProgress(Math.round(_percent));
+          onUploadProgress: function (_fileInfo: any, _total: number, _loaded: number, _speed: number) {
+            onProgress(_total > 0 ? Math.min(100, Math.round((_loaded / _total) * 100)) : 0);
           },
           onUploadSucceed: function () {
             done(() => resolve({ videoId, videoUrl: "" }));
@@ -535,8 +535,7 @@ export default function UploadPage() {
             uploadProgress={uploadProgress}
             uploadStatus={uploadStatus}
             onSubmit={() => {
-              const form = document.querySelector("form");
-              if (form) form.requestSubmit();
+              handleSubmit({ preventDefault: () => {} } as React.FormEvent);
             }}
           />
         )}

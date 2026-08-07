@@ -551,7 +551,7 @@ sudo firewall-cmd --reload
 2. **视频播放页** — 视频播放、点赞、收藏、评论、删除（仅作者）
 3. **视频播放器** — Aliplayer 统一播放所有视频（VOD 鉴权播放 / OSS 直链播放），点击视频区域播放/暂停，播放模式切换（循环/单次/自动连播），模式按用户永久保存到数据库（User.playMode），视频和图文共享同一设置
 4. **自动连播** — 不刷新页面切换视频，ready 事件后自动播放，推荐列表同步更新
-5. **上传页** — VOD 上传（通过 aliyun-upload-sdk 直传 VOD），失败自动回退 OSS；支持粘贴/拖拽、文件预览、上传进度条
+5. **上传页** — VOD 上传（通过 aliyun-upload-sdk 直传 VOD），失败自动回退 OSS；支持粘贴/拖拽、文件预览、上传进度条；视频/图文投稿统一直接调用 `handleSubmit` 提交（避免 `document.querySelector("form")` 误触 Header 搜索表单）
 6. **图文投稿** — 支持多张图片（最多40张）和可选背景音乐上传，图片预览轮播+缩略图导航（拖拽排序+封面选择），客户端压缩（Canvas API），进度百分比显示整数
 7. **个人主页** — 账号设置、我的投稿（可删除）、收藏列表、点赞列表（含视频/评论/获赞三个子分类）、我的评论
 8. **用户系统** — 注册/登录，改名后 Header 实时同步
@@ -710,6 +710,7 @@ sudo firewall-cmd --reload
 - 客户端使用 `aliyun-upload-sdk 1.5.7`（本地 `public/lib/` 引入），需按顺序加载 es6-promise → aliyun-oss-sdk → aliyun-upload-sdk
 - 上传 SDK API：`new AliyunUpload.Vod(options)` → `addFile()` → `startUpload()` → `onUploadstarted` 回调中调 `setUploadAuthAndAddress()`
 - 上传 SDK 的 `enableUploadProgress: false`（关闭进度上报，避免 `InvalidUserId` 错误）
+- 上传 SDK 的 `onUploadProgress` 回调签名是 `(fileInfo, totalBytes, loadedBytes)`，前端需用 `loaded / total * 100` 计算真实百分比（不能直接把参数当百分比，避免显示 `1917338%`）
 - 播放器使用 Aliplayer 2.25.1（CDN `g.alicdn.com/apsara-media-box/imp-web-player/2.25.1/`），所有视频统一使用 Aliplayer 播放
 - VOD 视频通过 `vid + playauth` 鉴权播放，OSS 视频通过 `source` 直链播放
 - VOD 上传失败时自动回退到 OSS 上传，保证投稿功能不受影响
