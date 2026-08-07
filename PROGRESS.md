@@ -6,6 +6,12 @@
 
 ## 已完成工作
 
+### 本次会话（评论粘贴净化）
+- **评论粘贴净化** — 修复从其他网页复制文字粘贴到评论区时带入源页面样式/HTML 标签的问题
+  - 根因：评论区输入框是 `contentEditable`，浏览器默认粘贴会插入剪贴板里的 `text/html`（含源页面 `style="color:..."` 等内联样式与任意 HTML 标签）。从 A 网页复制红色文字粘贴到评论区，文字变红、控制台能看到 color 属性；记事本只读 `text/plain` 所以看不到标签
+  - 修复：`handlePaste`/`handleReplyPaste` 在剪贴板无图片、无图片 URL 时 `preventDefault()` 拦截默认粘贴，只取 `text/plain` 纯文本用 `document.execCommand("insertText")` 插入，丢弃所有 HTML 标签与内联样式；图片/GIF/图片 URL 粘贴不受影响
+  - 效果：复制文字进评论区变为纯文本，颜色/字体/标签全部消失，恶意 HTML 标签无法注入页面；提交仍只存 `textContent` 纯文本，发布内容始终安全
+
 ### 本次会话（视频投稿修复）
 - **视频投稿按钮无响应修复** — 修复点击「立即投稿」无反应问题
   - 根因：`VideoUploadPage` 的提交回调使用 `document.querySelector("form")` 拿到的是 DOM 中第一个 `<form>`，即 Header 顶部搜索框（Header 渲染在投稿页之前），`requestSubmit()` 触发的是搜索表单而非投稿表单 → 看起来"没反应"

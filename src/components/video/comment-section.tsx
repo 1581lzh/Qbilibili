@@ -256,7 +256,14 @@ export default function CommentSection({ videoId }: { videoId: string }) {
       if (imageFiles.length === 0) {
         // 可能是复制的图片 URL（如 GIF 网站），尝试识别并下载为图片文件
         const urls = extractImageUrlsFromClipboard(e.clipboardData);
-        if (urls.length === 0) return;
+        if (urls.length === 0) {
+          // 无图片：只插入纯文本，丢弃剪贴板里的一切 HTML 标签与内联样式
+          // （从其他网页复制的文字会带着源页面的 style 等属性，直接粘贴会被插入到 DOM）
+          e.preventDefault();
+          const text = e.clipboardData.getData("text/plain");
+          if (text) document.execCommand("insertText", false, text);
+          return;
+        }
         e.preventDefault();
         const fetched: File[] = [];
         for (const url of urls) {
@@ -337,7 +344,13 @@ export default function CommentSection({ videoId }: { videoId: string }) {
 
       if (imageFiles.length === 0) {
         const urls = extractImageUrlsFromClipboard(e.clipboardData);
-        if (urls.length === 0) return;
+        if (urls.length === 0) {
+          // 无图片：只插入纯文本，丢弃剪贴板里的一切 HTML 标签与内联样式
+          e.preventDefault();
+          const text = e.clipboardData.getData("text/plain");
+          if (text) document.execCommand("insertText", false, text);
+          return;
+        }
         e.preventDefault();
         const fetched: File[] = [];
         for (const url of urls) {

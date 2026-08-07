@@ -113,7 +113,7 @@ H:\bilibili/
 │   │       ├── video-favorite-button.tsx  # 收藏按钮（乐观更新，即时响应）
 │   │       ├── video-delete-button.tsx    # 删除视频按钮
 │   │       ├── recommendations.tsx        # 推荐列表（cachedFetch 客户端缓存 + 作者头像）
-│   │       ├── comment-section.tsx        # 评论区（图片/GIF 粘贴上传 + 乐观更新 + 回车发送 + 2.5行输入框）
+│   │       ├── comment-section.tsx        # 评论区（图片/GIF 粘贴上传 + 粘贴净化（纯文本）+ 乐观更新 + 回车发送 + 2.5行输入框）
 │   │       ├── comment-images.tsx         # 评论图片展示组件（单图等比显示、多图 1:1 方形裁切缩略图）
 │   │       └── image-lightbox.tsx         # 图片灯箱组件（全屏查看 + 键盘导航）
 │   ├── lib/                   # 工具函数
@@ -343,6 +343,7 @@ VOD_SPACE_NAME=your-space-name
 ### XSS 防护
 - React 默认转义 JSX 中的变量输出
 - `dangerouslySetInnerHTML` 仅用于 layout.tsx 中硬编码的深色模式初始化脚本
+- **评论粘贴净化**：评论区 contentEditable 的 `handlePaste`/`handleReplyPaste` 在剪贴板无图片/图片 URL 时 `preventDefault()` 拦截默认粘贴，只插入 `text/plain` 纯文本（`document.execCommand("insertText")`），丢弃源页面带过来的内联样式与任意 HTML 标签，防止富文本/HTML 注入页面 DOM
 
 ### CSRF 防护
 - NextAuth 自动保护 `/api/auth/*` 端点
