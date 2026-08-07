@@ -792,6 +792,7 @@ sudo firewall-cmd --reload
 - **手动/自动分离**：`slideBy(dir, manual)` —— 自动轮播传 `false`（不暂停、进度从 0 续播），按键/拖拽/按钮/进度条传 `true`（暂停并满进度显示），修复自动轮播被误判为手动切换导致进度条瞬间满的问题
 - **控制栏水托荷叶**：进度条独立常驻屏幕底部；控制栏用 grid 行高 `0fr↔1fr` 过渡（`transition-[grid-template-rows]`）实现从底部升起/落下，`overflow-hidden` 内层折叠
 - **控件弹层不裁切**：音量条/模式提示弹层移出 `overflow-hidden` 裁切层，作为控制栏兄弟节点渲染；`useLayoutEffect` 测量按钮相对播放器容器的位置（`getBoundingClientRect` 差值）做绝对定位，弹层显示/容器尺寸变化时自动重算，全屏/缩放不错位
+- **三页轨道 key 唯一性（2 张图边界修复）**：轨道列表 `[prevIdx, currentIndex, nextIdx].map()` 的 `key` 须用**槽位 slot（0/1/2）**而非图片序号 —— 当只有 2 张图时 `prevIdx === nextIdx`，若以图片序号做 key（`key={page-${idx}}`）会因 `page-1`/`page-0` 重复导致 React DOM 复用错乱：计数器跳对但主图不更新（仍显示上一张）、相邻页元素意外残留（DOM 出现第 4 页）。表现为「切换后图片显示一致」「02 该暗却亮」（实际一直显示亮的 01）。改用 `key={page-slot-${slot}}` 后三槽恒唯一，DOM 结构稳定，React 仅更新各槽位 `src`，2 张图切换恢复正常
 
 ### 深浅模式圆形遮罩扩散
 - 点击切换按钮 → 在按钮位置生成纯色圆（目标主题 body 背景色 `#fff` / `#09090b`），`z-index:-1` 背景层，只遮空白/骨架区域，不遮挡卡片/按钮/视频/文字

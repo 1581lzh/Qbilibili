@@ -340,7 +340,7 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
   }, [images.length]);
 
   // 松手后结算：位移超过 1/4 页宽则滑到相邻页（循环），否则回弹
-  // 手动拖拽切换与按键一致：暂停自动轮播、进度满显示
+  // 手动拖拽切换与按键一致：暂停自动轮播并显示满进度
   const settleDrag = useCallback(() => {
     if (isSlidingRef.current) return;
     const W = containerWidthRef.current || 0;
@@ -1159,8 +1159,8 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
               transition: transitioning ? "transform 320ms cubic-bezier(0.22, 1, 0.36, 1)" : "none",
             }}
           >
-            {[prevIdx, currentIndex, nextIdx].map((idx) => (
-              <div key={`page-${idx}`} className="relative h-full w-full shrink-0 overflow-hidden">
+            {[prevIdx, currentIndex, nextIdx].map((idx, slot) => (
+              <div key={`page-slot-${slot}`} className="relative h-full w-full shrink-0 overflow-hidden">
                 <img
                   src={images[idx]}
                   alt=""

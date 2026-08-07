@@ -6,6 +6,12 @@
 
 ## 已完成工作
 
+### 本次会话（图文播放器 2 张图 key 冲突修复）
+- **图文播放器双图切换显示同一张修复** — 修复「01/02 两张图播放时显示成同一张、02 该暗却亮」问题
+  - 根因：ImageCarousel 相册式三页轨道 `[prevIdx, currentIndex, nextIdx].map()` 以**图片序号**做 React `key`（`key={page-${idx}}`）。只有 2 张图时 `prevIdx === nextIdx`，导致 `page-0/page-1` 出现重复 key，React DOM 复用错乱：切换后计数器跳对但**主图 src 不更新**（仍显示上一张）、上下页元素意外残留（DOM 出现第 4 页）。3+ 张图时各图序号不同，正常；仅 2 张边界触发
+  - 修复：key 改为**槽位号** `key={page-slot-${slot}}`（slot=0/1/2 恒唯一），DOM 结构稳定，React 仅更新各槽位 `src`，双图切换恢复正常（video-play-section.tsx）
+  - 排查过程：OSS/数据库/ICC 色彩配置均排除（已用 SHA-256、ffmpeg signalstats、PIL ICC 应用对比逐层验证 01/02 字节与亮度正确、ICC 应用前后亮度不变），最终用 Playwright 无头浏览器逐帧采样亮度曲线复现「先暗后亮」并定位为 key 冲突，而非图片/ICC/缓存问题
+
 ### 本次会话（评论粘贴净化）
 - **评论粘贴净化** — 修复从其他网页复制文字粘贴到评论区时带入源页面样式/HTML 标签的问题
   - 根因：评论区输入框是 `contentEditable`，浏览器默认粘贴会插入剪贴板里的 `text/html`（含源页面 `style="color:..."` 等内联样式与任意 HTML 标签）。从 A 网页复制红色文字粘贴到评论区，文字变红、控制台能看到 color 属性；记事本只读 `text/plain` 所以看不到标签
