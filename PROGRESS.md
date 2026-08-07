@@ -455,6 +455,7 @@
 ### 音量条自动隐藏 + 音量持久化（本次会话）
 - **音量条 2 秒自动隐藏** — 悬停音量图标弹出音量条并启动 2s 定时器（鼠标不滑入则自动消失）；滑入滑块取消定时器保持显示（拖动中不中断），移出滑块立即隐藏；控制栏 group-hover 隐藏仍生效
 - **音量状态持久化（仿播放模式）** — User 表新增 `volume`/`muted` 字段；新增 `src/lib/volume.ts`（`getSavedVolume`/`fetchVolume`/`updateVolume`，登录用户存数据库、未登录 fallback localStorage/sessionStorage）+ `/api/user/volume` GET/PUT；ImageCarousel 挂载时从数据库恢复音量/静音，调节/静音时保存；滑块拖动 300ms 防抖避免拖拽时刷请求
+- **视频播放器音量与图文共享** — VideoPlayer 接入共享音量状态（`src/lib/volume.ts` + `/api/user/volume`）：播放器初始化时用 `fetchVolume` 读取并 `player.setVolume()`/`tag.muted` 应用；监听 `volumechange`/`volumnchanged` 事件，用户调音量/静音时 `updateVolume` 写回数据库；静音时保留此前音量（Aliplayer 静音会把音量清零，避免覆盖用户设定）；登录用户按用户存库、未登录 fallback 本地存储，图文/视频互相跟随
 
 ### 深色模式按用户持久化（本次会话）
 - **User 表新增 `theme` 字段**（light/dark/system，默认 system）

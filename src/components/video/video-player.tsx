@@ -8,6 +8,7 @@ import { cachedFetch } from "@/lib/fetch-cache";
 import { consumeAutoPlayVideo } from "@/lib/signals";
 import { getVodPlayAuth } from "@/lib/vod-cache";
 import { type PlayMode, MODES, fetchPlayMode, updatePlayMode } from "@/lib/play-mode";
+import { type VolumeState, fetchVolume, updateVolume, getSavedVolume } from "@/lib/volume";
 import { isEditableTarget, isComposingEvent } from "@/lib/keyboard";
 
 const VIDEO_MODES: { key: PlayMode; label: string; icon: typeof Repeat }[] = [
@@ -248,6 +249,47 @@ export default function VideoPlayer({
   useEffect(() => { fetchPlayMode(userId).then(setMode); }, [userId]);
   useEffect(() => { modeRef.current = mode; }, [mode]);
 
+  // ---- 与图文播放器共享音量状态（DB 持久化，双向同步）----
+  const lastVolumeStateRef = useRef<VolumeState>(getSavedVolume(userId));
+
+  const applyVolumeToPlayer = useCallback((player: any, state: VolumeState) => {
+    if (!player) return;
+    lastVolumeStateRef.current = state;
+    try {
+      if (typeof player.setVolume === "function") {
+        player.setVolume(Math.max(0, Math.min(1, state.volume)));
+      }
+      const tag = player.tag;
+      if (tag && "muted" in tag) tag.muted = !!state.muted;
+    } catch {}
+  }, []);
+
+  const syncVolumeFromPlayer = useCallback((player: any) => {
+    if (!player) return;
+    let vol = 1;
+    let muted = false;
+    try {
+      const v = typeof player.getVolume === "function" ? player.getVolume() : undefined;
+      if (typeof v === "number" && isFinite(v)) vol = Math.max(0, Math.min(1, v));
+      muted = !!(player.tag && player.tag.muted);
+    } catch {}
+    const prev = lastVolumeStateRef.current;
+    // 静音时保留此前音量（Aliplayer 静音会把音量清零，避免覆盖掉用户设定的音量）
+    const next: VolumeState = { volume: muted ? prev.volume : vol, muted };
+    if (next.volume !== prev.volume || next.muted !== prev.muted) {
+      lastVolumeStateRef.current = next;
+      updateVolume(next, userIdRef.current);
+    }
+  }, []);
+
+  // 用户信息就绪/变化时，重新应用共享音量到播放器
+  useEffect(() => {
+    if (aliPlayerRef.current) {
+      fetchVolume(userId).then((s) => { if (aliPlayerRef.current) applyVolumeToPlayer(aliPlayerRef.current, s); });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
   const navigateToNext = useCallback(async () => {
     if (!nextVideoIdRef.current) return;
     try {
@@ -344,6 +386,10 @@ export default function VideoPlayer({
         }
 
         const player = new window.Aliplayer({ ...cfg, autoplay: shouldAutoPlay }, () => {});
+
+        // 应用共享音量状态（与图文播放器同步），并监听音量变化写回数据库
+        ["volumechange", "volumnchanged"].forEach((evt) => player.on(evt, () => syncVolumeFromPlayer(player)));
+        fetchVolume(userIdRef.current).then((s) => { if (!destroyed && aliPlayerRef.current === player) applyVolumeToPlayer(player, s); });
 
         if (shouldAutoPlay || autoPlayRef.current) {
           player.on("ready", () => { try { player.play(); } catch {} });

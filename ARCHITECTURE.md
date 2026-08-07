@@ -605,6 +605,7 @@ sudo firewall-cmd --reload
 - **图文进度条增强** — 每节从 `<div>` 改为 `<button>`，点击跳转到对应图片；悬停加粗 `3px→9px`（中线对称扩展，80ms 过渡）
 - **图文控制栏空白点击修复** — 控制栏加 `data-controlbar` 标记，点击控制栏空白只切换可见性，不触发播放/暂停
 - **图文音量控制** — 控制栏新增音量按钮（Volume2/Volume1/VolumeX 图标随音量变化），点击静音/取消静音，悬停弹出滑块调节背景音乐音量（渐变显示填充进度，注入 CSS 让 thumb 圆心对齐轨道中线，Tailwind 任意变体对 range 伪元素不可靠）；音量条悬停弹出 2s 自动隐藏（滑入滑块取消定时器保持显示），音量/静音状态按用户存数据库（User.volume/muted，`/api/user/volume`，滑块拖动 300ms 防抖）
+- **视频播放器音量与图文共享** — VideoPlayer 接入共享音量状态（`src/lib/volume.ts` + `/api/user/volume` GET/PUT）：初始化时 `fetchVolume` 读取并 `player.setVolume()`/`tag.muted` 应用；监听 `volumechange`/`volumnchanged` 事件，调音量/静音时 `updateVolume` 写回数据库；静音时保留此前音量（Aliplayer 静音会将音量清零，避免覆盖用户设定）；登录用户按用户存库、未登录 fallback 本地存储，图文/视频音量互相跟随
 - **图文中心蒙版动画修复** — 中心指示器加 `z-40`（原无 z-index 被主图 `z-10` 盖住导致不显示，子代理调研确认根因）
 
 - **图片轮播触摸处理** — ImageCarousel 组件（`video-play-section.tsx`）使用与视频播放器一致的原生 `addEventListener` 方式处理触摸事件。React 合成 `onTouchStart` 默认注册为 passive listener，`preventDefault()` 会被浏览器忽略，因此必须使用原生 API + `{ capture: true, passive: false }` 才能阻断 click 事件合成。所有回调通过 ref 访问（`togglePlayRef`、`handleManualSwitchRef`、`currentIndexRef`、`imagesLengthRef`），useEffect 依赖数组为空，避免状态变化导致监听器重建丢失 `lastTap` 时间戳。PC 端 click 处理器始终绑定（不使用 `ontouchstart` 守卫），与视频播放器对齐——移动端通过 `touchstart.preventDefault()` 阻止合成 click，触摸屏笔记本的鼠标和触摸两种输入模式可共存。
