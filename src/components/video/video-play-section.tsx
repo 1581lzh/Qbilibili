@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback, useReducer, useMemo } from "react";
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, useReducer, useMemo } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { motion, AnimatePresence } from "framer-motion";
@@ -97,6 +97,11 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
   const [muted, setMuted] = useState(() => getSavedVolume(userId).muted);
   const [showVolume, setShowVolume] = useState(false);
   const [showModeTooltip, setShowModeTooltip] = useState(false);
+  // 弹层（音量条/模式提示）置于控制栏 overflow-hidden 之外，用按钮实际位置做绝对定位，避免被裁切
+  const modeBtnRef = useRef<HTMLButtonElement>(null);
+  const volBtnRef = useRef<HTMLButtonElement>(null);
+  const [modePopupPos, setModePopupPos] = useState<{ right: number; bottom: number } | null>(null);
+  const [volPopupPos, setVolPopupPos] = useState<{ right: number; bottom: number } | null>(null);
   const [showControls, setShowControls] = useState(() => {
     // Mobile: show controls for 3 seconds on mount
     if (typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0)) {
@@ -140,7 +145,7 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
 
   // 图片比例按索引缓存（轨道相邻页的模糊背景与主图随页面一起平移）
   const imageRatioRefs = useRef<(number | null)[]>([]);
-  const [, setRatioTick] = useState(0);
+  const [ratioTick, setRatioTick] = useState(0);
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -822,13 +827,29 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
   const showVolumeTemporarily = useCallback(() => {
     setShowVolume(true);
     if (volumeTimerRef.current) clearTimeout(volumeTimerRef.current);
-    volumeTimerRef.current = setTimeout(() => setShowVolume(false), 2000);
+    volumeTimerRef.current = setTimeout(() => setShowVolume(false), 1500);
   }, []);
   const keepVolumeVisible = useCallback(() => {
     if (volumeTimerRef.current) { clearTimeout(volumeTimerRef.current); volumeTimerRef.current = null; }
     setShowVolume(true);
   }, []);
   useEffect(() => () => { if (volumeTimerRef.current) clearTimeout(volumeTimerRef.current); if (volumePersistTimerRef.current) clearTimeout(volumePersistTimerRef.current); }, []);
+
+  // 音量条/模式提示弹层：控制栏 grid 0fr↔1fr 动画需要 overflow-hidden 裁切，会把弹层一起裁掉。
+  // 弹层改为基于按钮实际位置（相对播放器容器）的绝对定位，渲染在裁切层之外。
+  useLayoutEffect(() => {
+    const c = containerRef.current;
+    if (!c) return;
+    const cr = c.getBoundingClientRect();
+    if (showModeTooltip && modeBtnRef.current) {
+      const r = modeBtnRef.current.getBoundingClientRect();
+      setModePopupPos({ right: cr.right - r.right, bottom: cr.bottom - r.bottom + 32 });
+    }
+    if (showVolume && volBtnRef.current) {
+      const r = volBtnRef.current.getBoundingClientRect();
+      setVolPopupPos({ right: cr.right - r.right, bottom: cr.bottom - r.top + 8 });
+    }
+  }, [showModeTooltip, showVolume, showControls, ratioTick]);
 
   // 音量滑块样式：thumb 圆点相对轨道中线对齐（Tailwind 任意变体对 range 伪元素不可靠，用注入 CSS）
   useEffect(() => {
@@ -1272,23 +1293,20 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
               }}
               onMouseEnter={() => setShowModeTooltip(true)}
               onMouseLeave={() => setShowModeTooltip(false)}
-              className="relative text-white hover:text-[#FB7299]"
+              ref={modeBtnRef}
+              className="text-white hover:text-[#FB7299]"
             >
               {mode === "loop" && <Repeat className="h-5 w-5" />}
               {mode === "single" && <Play className="h-5 w-5" />}
               {mode === "next" && <SkipForward className="h-5 w-5" />}
-              {showModeTooltip && (
-                <div className="absolute bottom-8 right-0 whitespace-nowrap rounded bg-black/80 px-2 py-1 text-xs text-white">
-                  {MODES.find(m => m.key === mode)?.label}
-                </div>
-              )}
             </button>
             {/* Volume control */}
-            <div className="group/vol relative flex items-center">
+            <div className="relative flex items-center">
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); toggleMute(); }}
                 onMouseEnter={showVolumeTemporarily}
+                ref={volBtnRef}
                 className="text-white hover:text-[#FB7299]"
                 title={muted ? "取消静音" : "静音"}
               >
@@ -1300,28 +1318,6 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
                   <Volume2 className="h-5 w-5" />
                 )}
               </button>
-              {/* Volume slider on hover — 悬停图标显示（2s 后自动消失），滑入滑块取消定时器保持显示，移出滑块立即隐藏 */}
-              <div
-                onMouseEnter={keepVolumeVisible}
-                onMouseLeave={() => { setShowVolume(false); if (volumeTimerRef.current) { clearTimeout(volumeTimerRef.current); volumeTimerRef.current = null; } }}
-                className={`absolute bottom-full right-0 mb-2 flex-col items-center gap-1 rounded-md bg-black/80 px-2 py-2 transition-opacity duration-200 ${
-                  showVolume ? "flex opacity-100" : "pointer-events-none flex opacity-0"
-                }`}
-              >
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.01}
-                  value={muted ? 0 : volume}
-                  onChange={(e) => { e.stopPropagation(); handleVolumeChange(parseFloat(e.target.value)); }}
-                  className="bili-vol-slider h-1 w-20 cursor-pointer rounded-full"
-                  style={{
-                    background: `linear-gradient(to right, #FB7299 ${muted ? 0 : volume * 100}%, rgba(255,255,255,0.3) ${muted ? 0 : volume * 100}%)`,
-                  }}
-                  onClick={(e) => e.stopPropagation()}
-                />
-              </div>
             </div>
             <button
               type="button"
@@ -1347,6 +1343,37 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
                 </div>
               </div>
             </div>
+            {/* 模式提示 + 音量条弹层：放在控制栏 overflow-hidden 之外，避免向上弹出时被裁切 */}
+            {showModeTooltip && modePopupPos && (
+              <div
+                className="pointer-events-none absolute z-30 whitespace-nowrap rounded bg-black/80 px-2 py-1 text-xs text-white"
+                style={{ right: `${modePopupPos.right}px`, bottom: `${modePopupPos.bottom}px` }}
+              >
+                {MODES.find(m => m.key === mode)?.label}
+              </div>
+            )}
+            {showVolume && volPopupPos && (
+              <div
+                onMouseEnter={keepVolumeVisible}
+                onMouseLeave={() => { setShowVolume(false); if (volumeTimerRef.current) { clearTimeout(volumeTimerRef.current); volumeTimerRef.current = null; } }}
+                className="absolute z-30 flex flex-col items-center gap-1 rounded-md bg-black/80 px-2 py-2"
+                style={{ right: `${volPopupPos.right}px`, bottom: `${volPopupPos.bottom}px` }}
+              >
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={muted ? 0 : volume}
+                  onChange={(e) => { e.stopPropagation(); handleVolumeChange(parseFloat(e.target.value)); }}
+                  className="bili-vol-slider h-1 w-20 cursor-pointer rounded-full"
+                  style={{
+                    background: `linear-gradient(to right, #FB7299 ${muted ? 0 : volume * 100}%, rgba(255,255,255,0.3) ${muted ? 0 : volume * 100}%)`,
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                />
+              </div>
+            )}
           </div>
         );
       })()}

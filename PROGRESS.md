@@ -14,6 +14,13 @@
   - 根因：`aliyun-upload-sdk` 的 `onUploadProgress` 回调签名是 `(fileInfo, totalBytes, loadedBytes)`，原代码把第二个参数（总字节数，如 1917338 字节）当成百分比直接显示
   - 修复：按 `loaded / total * 100` 计算真实百分比，并 `Math.min(100, ...)` 封顶（upload/page.tsx）
 
+### 本次会话（图文控件裁切 / 音量 1.5s / 评论图片 1:1）
+- **图文播放器控件裁切修复** — 修复音量条/模式提示超出控制栏被裁切显示不全
+  - 根因：控制栏 0fr↔1fr 水托荷叶动画依赖内层 `overflow-hidden` 裁切，向上弹出的音量条、模式提示弹层也被一起裁掉
+  - 修复：弹层移出 `overflow-hidden` 裁切层，作为控制栏兄弟节点渲染；用 `useLayoutEffect` 测量按钮相对播放器容器的实际位置（`getBoundingClientRect` 差值）做绝对定位，弹层显示/容器尺寸变化时自动重算，全屏/缩放不错位
+- **音量条 2s → 1.5s 自动消失** — 悬停音量图标弹出的音量条自动隐藏时间由 2s 缩短为 1.5s（`video-play-section.tsx` `showVolumeTemporarily`）
+- **评论图片展示优化** — `comment-images.tsx` 单图等比缩小显示，多图改为每张 1:1 方形裁切（桌面端 145px / 移动端 112px），GIF 完整显示不裁切
+
 ### 本次会话（键盘控制 / 图文相册 / GIF 评论 / 主题遮罩 / 头像统一）
 - **键盘控制增强** — 新增 `src/lib/keyboard.ts`（`isEditableTarget` + `isComposingEvent`）
   - 评论/搜索输入时方向键不再误触图文/视频控制（contentEditable 聚焦或中文输入法组合中自动跳过）
@@ -32,7 +39,7 @@
   - 绑定 `onPaste`：拦截图片文件（含 GIF）转预览图；兼容粘贴图片 URL（HTML `<img>` / uri-list / 纯文本链接自动下载）
   - `hasContent()`/`canReply()` 识别嵌入 `<img>`；提交时兜底收集嵌入图片上传
   - GIF 不走 canvas 压缩（会破坏动画），超 8MB 提示更换；其他格式保持压缩
-- **评论图片等比显示** — `comment-images.tsx` 去掉固定宽高比 + object-cover 裁切，改为等比完整显示（单图 object-contain、多图网格高度自适应），GIF 动图不再被裁
+- **评论图片展示优化** — `comment-images.tsx` 展示规则调整为：单图等比缩小显示（object-contain），多图每张 1:1 方形裁切缩略图（桌面端 145px / 移动端 112px），GIF 动图完整显示不裁切
 - **评论输入框增高** — 主评论框 min-height 40px→66px（2.5 行），回复框 32px→62px，可看到下一行文字
 - **头像颜色统一** — 新增 `src/lib/avatar.ts`（`avatarColorFor()` 共享 hash 算法 + 色板）
   - 替换所有硬编码粉色头像：评论区（评论/回复）、视频作者位置、管理面板用户列表、个人中心、公共主页、头像菜单、视频卡片
@@ -453,7 +460,7 @@
 - **元数据/进度监听独立拆分** — 从阶段机拆出独立 effect 驱动 `loadedmetadata`/`timeupdate`（进度条与时长分配），暂停/恢复后依然生效
 
 ### 音量条自动隐藏 + 音量持久化（本次会话）
-- **音量条 2 秒自动隐藏** — 悬停音量图标弹出音量条并启动 2s 定时器（鼠标不滑入则自动消失）；滑入滑块取消定时器保持显示（拖动中不中断），移出滑块立即隐藏；控制栏 group-hover 隐藏仍生效
+- **音量条 1.5 秒自动隐藏** — 悬停音量图标弹出音量条并启动 1.5s 定时器（鼠标不滑入则自动消失）；滑入滑块取消定时器保持显示（拖动中不中断），移出滑块立即隐藏；控制栏 group-hover 隐藏仍生效
 - **音量状态持久化（仿播放模式）** — User 表新增 `volume`/`muted` 字段；新增 `src/lib/volume.ts`（`getSavedVolume`/`fetchVolume`/`updateVolume`，登录用户存数据库、未登录 fallback localStorage/sessionStorage）+ `/api/user/volume` GET/PUT；ImageCarousel 挂载时从数据库恢复音量/静音，调节/静音时保存；滑块拖动 300ms 防抖避免拖拽时刷请求
 - **视频播放器音量与图文共享** — VideoPlayer 接入共享音量状态（`src/lib/volume.ts` + `/api/user/volume`）：播放器初始化时用 `fetchVolume` 读取并 `player.setVolume()`/`tag.muted` 应用；监听 `volumechange`/`volumnchanged` 事件，用户调音量/静音时 `updateVolume` 写回数据库；静音时保留此前音量（Aliplayer 静音会把音量清零，避免覆盖用户设定）；登录用户按用户存库、未登录 fallback 本地存储，图文/视频互相跟随
 

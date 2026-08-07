@@ -52,13 +52,13 @@ export default function CommentImages({ images, onImageClick }: CommentImagesPro
   const mobileOverflowCount = images.length - MOBILE_MAX_VISIBLE;
 
   return (
-    <div className="mt-2 grid grid-cols-3 gap-1 sm:grid-cols-4">
+    <div className="mt-2 flex flex-wrap gap-1 sm:gap-1.5">
       {images.map((src, i) => {
         const isLastMobileVisible = mobileOverflow && i === MOBILE_MAX_VISIBLE - 1;
         return (
           <div
             key={i}
-            className={`group relative cursor-pointer overflow-hidden rounded-md ${i >= MOBILE_MAX_VISIBLE ? 'hidden sm:block' : ''}`}
+            className={`group relative h-28 w-28 cursor-pointer overflow-hidden rounded-md sm:h-[145px] sm:w-[145px] ${i >= MOBILE_MAX_VISIBLE ? 'hidden sm:block' : ''}`}
             onClick={() => onImageClick(i)}
             onMouseEnter={() => setHoveredIndex(i)}
             onMouseLeave={() => setHoveredIndex(null)}
@@ -68,7 +68,7 @@ export default function CommentImages({ images, onImageClick }: CommentImagesPro
               alt=""
               loading="lazy"
               decoding="async"
-              className="h-auto w-full object-contain"
+              className="h-full w-full object-cover"
             />
             {hoveredIndex === i && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/40 transition-opacity duration-200">

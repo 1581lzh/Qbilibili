@@ -114,7 +114,7 @@ H:\bilibili/
 │   │       ├── video-delete-button.tsx    # 删除视频按钮
 │   │       ├── recommendations.tsx        # 推荐列表（cachedFetch 客户端缓存 + 作者头像）
 │   │       ├── comment-section.tsx        # 评论区（图片/GIF 粘贴上传 + 乐观更新 + 回车发送 + 2.5行输入框）
-│   │       ├── comment-images.tsx         # 评论图片展示组件（等比显示不裁切）
+│   │       ├── comment-images.tsx         # 评论图片展示组件（单图等比显示、多图 1:1 方形裁切缩略图）
 │   │       └── image-lightbox.tsx         # 图片灯箱组件（全屏查看 + 键盘导航）
 │   ├── lib/                   # 工具函数
 │   │   ├── auth.ts            # NextAuth 配置 + getSession() 安全封装
@@ -580,7 +580,7 @@ sudo firewall-cmd --reload
 31. **头像链接优化** — 移动端头像点击切换菜单，桌面端头像点击跳转个人主页
 32. **弱网交互优化** — 点赞/收藏/评论乐观更新（即时响应）、页面骨架屏（loading.tsx）、代码分割（next/dynamic 懒加载）、播放器预加载、API 缓存头、客户端 fetch 缓存
 33. **毛玻璃效果** — 下拉菜单 `backdrop-blur-xl` 直接模糊页面内容，弹窗遮罩分离模糊层与内容层（blur 静态 + opacity GPU 动画）
-34. **评论图片附件** — 每条评论最多 7 张图片，文字可选；单图 4:3 大图，多图 1:1 方形缩略图网格；PC 端 4 列，移动端 3 列 + 溢出 "+N" 标记；全屏灯箱查看原图（键盘导航、ESC 关闭）
+34. **评论图片附件** — 每条评论最多 7 张图片，文字可选；单图等比显示，多图 1:1 方形裁切缩略图（桌面端约 145px）+ 移动端溢出 "+N" 标记；全屏灯箱查看原图（键盘导航、ESC 关闭）
 35. **图文播放优化** — 播放/暂停图标正确显示（暂停显示▶，播放显示⏸）；浏览器阻止自动播放时自动降级到暂停状态，用户交互后恢复
 36. **音频响度标准化** — 上传视频后自动使用 FFmpeg loudnorm（EBU R128，-14 LUFS）标准化音频响度，支持 OSS 和 VOD 两种视频来源，异步队列处理，非阻塞播放；启动时自动回填未处理的旧视频
 37. **Emoji 支持** — 评论/投稿支持 Unicode emoji 和抖音表情包，emoji 选择器面板（分类浏览 + 搜索），contentEditable 实时预览 emoji 图片，抖音表情包 214 个（存储在 public/emoji/douyin/），B站格式兼容（`:表情名:`语法）
@@ -604,7 +604,7 @@ sudo firewall-cmd --reload
 - **图文左右切换按钮修复** — 按钮加 `z-30`（原被主图 `z-10` 盖住导致点击失效，用控制台 `elementFromPoint` 诊断确认）；hover 时背景蒙版加深 40%（`bg-black/50→90`）
 - **图文进度条增强** — 每节从 `<div>` 改为 `<button>`，点击跳转到对应图片；悬停加粗 `3px→9px`（中线对称扩展，80ms 过渡）
 - **图文控制栏空白点击修复** — 控制栏加 `data-controlbar` 标记，点击控制栏空白只切换可见性，不触发播放/暂停
-- **图文音量控制** — 控制栏新增音量按钮（Volume2/Volume1/VolumeX 图标随音量变化），点击静音/取消静音，悬停弹出滑块调节背景音乐音量（渐变显示填充进度，注入 CSS 让 thumb 圆心对齐轨道中线，Tailwind 任意变体对 range 伪元素不可靠）；音量条悬停弹出 2s 自动隐藏（滑入滑块取消定时器保持显示），音量/静音状态按用户存数据库（User.volume/muted，`/api/user/volume`，滑块拖动 300ms 防抖）
+- **图文音量控制** — 控制栏新增音量按钮（Volume2/Volume1/VolumeX 图标随音量变化），点击静音/取消静音，悬停弹出滑块调节背景音乐音量（渐变显示填充进度，注入 CSS 让 thumb 圆心对齐轨道中线，Tailwind 任意变体对 range 伪元素不可靠）；音量条悬停弹出 1.5s 自动隐藏（滑入滑块取消定时器保持显示），音量/静音状态按用户存数据库（User.volume/muted，`/api/user/volume`，滑块拖动 300ms 防抖）
 - **视频播放器音量与图文共享** — VideoPlayer 接入共享音量状态（`src/lib/volume.ts` + `/api/user/volume` GET/PUT）：初始化时 `fetchVolume` 读取并 `player.setVolume()`/`tag.muted` 应用；监听 `volumechange`/`volumnchanged` 事件，调音量/静音时 `updateVolume` 写回数据库；静音时保留此前音量（Aliplayer 静音会将音量清零，避免覆盖用户设定）；登录用户按用户存库、未登录 fallback 本地存储，图文/视频音量互相跟随
 - **图文中心蒙版动画修复** — 中心指示器加 `z-40`（原无 z-index 被主图 `z-10` 盖住导致不显示，子代理调研确认根因）
 
@@ -666,7 +666,7 @@ sudo firewall-cmd --reload
   - 图片选择：支持文件选择器、Ctrl+V 粘贴上传、粘贴图片 URL（HTML `<img>`/uri-list/纯文本链接自动下载）
   - 图片压缩：超过 8MB 自动压缩（Canvas API），压缩后仍超限则提示用户；**GIF 不压缩**（canvas 压缩会破坏动画，超限直接提示更换）
   - 单图布局：等比显示（`object-contain`，max-width 280px / max-height 240px），悬停显示放大图标，不裁切（GIF 动图完整显示）
-  - 多图布局：网格列宽固定、高度自适应（`h-auto w-full`），PC 端 4 列，移动端 3 列
+  - 多图布局：每张 1:1 方形裁切（`object-cover`，桌面端 145px / 移动端 112px），flex-wrap 排列，GIF 完整显示不裁切
   - 移动端溢出：第 4-7 张隐藏，最后一张显示 "+N" 标记
   - 灯箱组件：全屏查看原图，键盘左右箭头切换，ESC 关闭，遮罩点击关闭
   - 灯箱缩放：鼠标滚轮缩放，+/- 按钮缩放，键盘 +/- 快捷键，双击切换缩放，拖拽平移，移动端双指捏合缩放
@@ -790,6 +790,7 @@ sudo firewall-cmd --reload
 - **每页独立模糊背景**：模糊 `<img>` 与清晰主图在同一页面容器内一起平移，`overflow-hidden` 裁剪 `scale-110 + blur-60px` 扩散避免串色
 - **手动/自动分离**：`slideBy(dir, manual)` —— 自动轮播传 `false`（不暂停、进度从 0 续播），按键/拖拽/按钮/进度条传 `true`（暂停并满进度显示），修复自动轮播被误判为手动切换导致进度条瞬间满的问题
 - **控制栏水托荷叶**：进度条独立常驻屏幕底部；控制栏用 grid 行高 `0fr↔1fr` 过渡（`transition-[grid-template-rows]`）实现从底部升起/落下，`overflow-hidden` 内层折叠
+- **控件弹层不裁切**：音量条/模式提示弹层移出 `overflow-hidden` 裁切层，作为控制栏兄弟节点渲染；`useLayoutEffect` 测量按钮相对播放器容器的位置（`getBoundingClientRect` 差值）做绝对定位，弹层显示/容器尺寸变化时自动重算，全屏/缩放不错位
 
 ### 深浅模式圆形遮罩扩散
 - 点击切换按钮 → 在按钮位置生成纯色圆（目标主题 body 背景色 `#fff` / `#09090b`），`z-index:-1` 背景层，只遮空白/骨架区域，不遮挡卡片/按钮/视频/文字
