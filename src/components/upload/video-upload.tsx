@@ -60,11 +60,11 @@ export function VideoUploadPage({
   }, [thumbnail]);
 
   return (
-    <div className={`flex flex-col gap-6 lg:flex-row ${!file && !thumbnail ? "lg:items-end" : ""}`}>
+    <div className="flex flex-col gap-6 lg:flex-row">
       {/* Left: Video preview */}
       <div className="w-full lg:w-2/5">
-        <div className="sticky top-4">
-          <div className="relative aspect-[3/4] overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-800">
+        <div className="flex flex-col gap-3 lg:sticky lg:top-4 lg:h-full">
+          <div className="relative aspect-[3/4] overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-800 lg:aspect-auto lg:flex-1 lg:min-h-0">
             <AnimatePresence mode="wait">
               {videoPreview ? (
                 <motion.video
@@ -103,40 +103,6 @@ export function VideoUploadPage({
 
       {/* Right: Content area */}
       <div className="w-full lg:w-3/5 space-y-4">
-        {/* Video file upload */}
-        <div>
-          <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            视频文件 *
-          </label>
-          <input
-            ref={videoInputRef}
-            type="file"
-            accept="video/*"
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
-            className="hidden"
-          />
-          <button
-            type="button"
-            onClick={() => videoInputRef.current?.click()}
-            className="w-full rounded-lg border border-dashed border-zinc-300 bg-white px-3 py-6 text-center text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700"
-          >
-            <svg className="mx-auto mb-2 h-8 w-8 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-            </svg>
-            {file ? file.name : "选择视频文件"}
-            {file && (
-              <p className="mt-1 text-xs text-zinc-400">
-                ({(file.size / 1024 / 1024).toFixed(2)} MB)
-              </p>
-            )}
-            {!file && (
-              <p className="mt-1 text-xs text-zinc-400">
-                支持粘贴（Ctrl+V）或拖拽文件到页面
-              </p>
-            )}
-          </button>
-        </div>
-
         {/* Title */}
         <div>
           <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
@@ -178,6 +144,40 @@ export function VideoUploadPage({
             <EmojiPicker onSelect={(emoji) => insertTextAtCursor(descRef, emoji)} />
             <p className="text-xs text-zinc-400">{description.length}/1000</p>
           </div>
+        </div>
+
+        {/* Video file upload */}
+        <div>
+          <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            视频文件 *
+          </label>
+          <input
+            ref={videoInputRef}
+            type="file"
+            accept="video/*"
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => videoInputRef.current?.click()}
+            className="w-full rounded-lg border border-dashed border-zinc-300 bg-white px-3 py-6 text-center text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+          >
+            <svg className="mx-auto mb-2 h-8 w-8 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            {file ? file.name : "选择视频文件"}
+            {file && (
+              <p className="mt-1 text-xs text-zinc-400">
+                ({(file.size / 1024 / 1024).toFixed(2)} MB)
+              </p>
+            )}
+            {!file && (
+              <p className="mt-1 text-xs text-zinc-400">
+                支持粘贴（Ctrl+V）或拖拽文件到页面
+              </p>
+            )}
+          </button>
         </div>
 
         {/* Thumbnail upload */}

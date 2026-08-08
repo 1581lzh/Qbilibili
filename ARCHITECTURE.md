@@ -102,13 +102,13 @@ H:\bilibili/
 │   │   ├── providers.tsx      # 全局 Provider（AuthModal 通过 next/dynamic 懒加载）
 │   │   ├── theme-provider.tsx # 深色模式 Provider（light/dark/system + 圆形遮罩扩散动画（背景层圆+圆中圆+文字单独渐变））
 │   │   ├── upload/            # 投稿相关组件
-│   │   │   ├── video-upload.tsx        # 视频投稿组件（左右布局：视频预览+表单）
-│   │   │   ├── image-text-upload.tsx   # 图文投稿组件（左右布局：大预览+瀑布流缩略图+编辑模式）
+│   │   │   ├── video-upload.tsx        # 视频投稿组件（左右布局：视频预览+表单，预览窗口与右侧表单等高对齐；表单顺序：标题→简介→视频文件→封面图）
+│   │   │   ├── image-text-upload.tsx   # 图文投稿组件（左右布局：大预览+瀑布流缩略图+编辑模式；预览窗口与右侧表单等高对齐）
 │   │   │   └── music-player.tsx        # 音乐播放器组件
 │   │   └── video/             # 视频相关组件
 │   │       ├── video-card.tsx             # 视频卡片（同名同色头像）
 │   │       ├── video-player.tsx           # 视频播放器（Aliplayer + 空格暂停 + 方向键/A-D 快退快进 5 秒）
-│   │       ├── video-play-section.tsx     # 播放区域（含图片轮播组件：相册式左右平移轨道（鼠标/触摸拖动+循环）、预加载窗口（前后2张图片+实况视频数据）、播放模式切换（循环/单次/自动连播）、底部图片进度条（始终显示，控制栏 0fr↔1fr 水托荷叶动画）、音量控制、中心蒙版动画、PC单击+移动端双击暂停）
+│   │       ├── video-play-section.tsx     # 播放区域（含图片轮播组件：相册式左右平移轨道（鼠标/触摸拖动+循环）、预加载窗口（前后2张图片+实况视频数据）、播放模式切换（循环/单次/自动连播）、底部图片进度条（始终显示，控制栏 0fr↔1fr 水托荷叶动画）、音量控制、中心蒙版动画、PC单击+移动端双击暂停；CollapsibleDescription 描述折叠组件（超 1.5 行折叠：第一行完整+第二行按字符量截断（非垂直腰斩），截断点后同一行接"···"+"展开"按钮，展开后末尾内联"折叠"按钮，Range.getClientRects 行像素测量+二分预留后缀宽度，符号前移截断，resize 重测，切视频按 key 重置））
 │   │       ├── video-like-button.tsx      # 点赞按钮（乐观更新，即时响应）
 │   │       ├── video-favorite-button.tsx  # 收藏按钮（乐观更新，即时响应）
 │   │       ├── video-delete-button.tsx    # 删除视频按钮

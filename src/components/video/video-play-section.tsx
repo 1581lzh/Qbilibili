@@ -1439,6 +1439,119 @@ const CommentSection = dynamic(() => import("@/components/video/comment-section"
   ),
 });
 
+// 描述折叠组件：内容超过 1.5 行时折叠。折叠状态文字在第二行中间水平截断（非垂直腰斩），
+// 截断处后同一行接上 "···" + 展开按钮；展开后全文显示，末尾显示折叠按钮
+function CollapsibleDescription({ text }: { text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [isLongDesc, setIsLongDesc] = useState(false);
+  const [collapsedText, setCollapsedText] = useState(text);
+  const descRef = useRef<HTMLParagraphElement>(null);
+
+  const measure = useCallback(() => {
+    const el = descRef.current;
+    if (!el) return;
+    const W = el.clientWidth;
+    if (W <= 0) return;
+    const cs = getComputedStyle(el);
+    const lineH = parseFloat(cs.lineHeight) || 24;
+
+    // 隐藏测量节点：与真实段落同宽同字体同换行规则。
+    // 注意不能用 scrollHeight 判断行数——第二行只要有内容高度就整行 +1，
+    // 必须用 Range.getClientRects() 拿到每一行的实际像素宽度
+    const m = document.createElement("div");
+    m.style.cssText = `position:absolute;left:-9999px;top:0;visibility:hidden;width:${W}px;box-sizing:border-box;font:${cs.font};font-weight:${cs.fontWeight};line-height:${cs.lineHeight};white-space:${cs.whiteSpace};letter-spacing:${cs.letterSpacing};`;
+    document.body.appendChild(m);
+    const left = m.getBoundingClientRect().left;
+    const right = m.getBoundingClientRect().right;
+
+    // 后缀（"···" + "展开"按钮）宽度，需要从第二行内容中预留出来
+    const suffixSpan = document.createElement("span");
+    suffixSpan.style.cssText = `position:absolute;visibility:hidden;white-space:nowrap;font:${cs.font};font-weight:500;`;
+    suffixSpan.textContent = "···展开";
+    document.body.appendChild(suffixSpan);
+    const suffixWidth = suffixSpan.clientWidth;
+    suffixSpan.remove();
+
+    const rectsFor = (t: string) => {
+      m.textContent = t;
+      const tn = m.firstChild;
+      if (!tn) return [] as DOMRect[];
+      const r = document.createRange();
+      r.setStart(tn, 0);
+      r.setEnd(tn, t.length);
+      // 过滤掉行尾的 0 宽插入点矩形，只保留每行实际文本矩形
+      return Array.from(r.getClientRects()).filter((x) => x.width > 0.5);
+    };
+
+    const plain = text.replace(/\n+$/, "");
+    const fullRects = rectsFor(plain);
+    // 超过 1.5 行才折叠：超过 2 行，或第 2 行内容超过半行宽
+    let long = false;
+    if (fullRects.length >= 3) long = true;
+    else if (fullRects.length === 2 && fullRects[1].right - left > W * 0.5) long = true;
+    setIsLongDesc(long);
+
+    if (long) {
+      // 二分：截断点保持在第二行内（第二行只显示到半行宽），且预留后缀宽度不溢出。
+      // 注意 used 是相对容器左缘的宽度，右侧比较也须用相对宽度 W（不能用绝对坐标 right）
+      const fits = (t: string) => {
+        const rects = rectsFor(t);
+        if (rects.length === 0) return true;
+        if (rects.length > 2) return false;
+        const last = rects[rects.length - 1];
+        const used = last.right - left;
+        return used <= W * 0.5 + 1 && used + suffixWidth <= W + 2;
+      };
+      let lo = 0;
+      let hi = text.length;
+      while (lo < hi) {
+        const mid = (lo + hi + 1) >> 1;
+        if (fits(text.slice(0, mid).replace(/\n+$/, ""))) lo = mid;
+        else hi = mid - 1;
+      }
+      // 截断点落在符号（标点/符号类字符）上时向前推移一个字符再截断
+      let cut = lo;
+      while (cut > 0 && /[\p{P}\p{S}]/u.test(text[cut - 1])) cut--;
+      setCollapsedText(text.slice(0, cut).replace(/\n+$/, ""));
+    }
+    m.remove();
+  }, [text]);
+
+  useLayoutEffect(() => {
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [measure]);
+
+  const collapsed = isLongDesc && !expanded;
+
+  return (
+    <p
+      ref={descRef}
+      className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-zinc-600 dark:text-zinc-400 sm:mt-3 sm:text-base"
+    >
+      {collapsed ? collapsedText : text}
+      {collapsed && <span className="font-medium">···</span>}
+      {collapsed && (
+        <button
+          onClick={() => setExpanded(true)}
+          className="cursor-pointer whitespace-pre text-sm font-medium text-zinc-400 hover:text-[#FB7299] dark:text-zinc-500 dark:hover:text-[#FB7299] sm:text-base"
+        >
+          展开
+        </button>
+      )}
+      {isLongDesc && expanded && (
+        <button
+          onClick={() => setExpanded(false)}
+          className="ml-1.5 cursor-pointer text-sm font-medium text-zinc-400 hover:text-[#FB7299] dark:text-zinc-500 dark:hover:text-[#FB7299] sm:text-base"
+        >
+          折叠
+        </button>
+      )}
+    </p>
+  );
+}
+
 export default function VideoPlaySection({
   video,
   nextVideoId,
@@ -1529,9 +1642,7 @@ export default function VideoPlaySection({
             <span>{new Date(state.video.createdAt).toLocaleDateString("zh-CN")}</span>
           </div>
           {state.video.description && (
-            <p className="mt-2 whitespace-pre-wrap text-sm text-zinc-600 dark:text-zinc-400 sm:mt-3 sm:text-base">
-              {state.video.description}
-            </p>
+            <CollapsibleDescription key={state.video.id} text={state.video.description} />
           )}
           <div className="mt-3 flex items-center gap-2 sm:mt-4 sm:gap-3">
             <VideoLikeButton key={`like-${state.video.id}`} videoId={state.video.id} initialCount={state.likeCount} initialLiked={state.liked} />

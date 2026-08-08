@@ -483,12 +483,12 @@ export function ImageTextUploadPage({
   };
 
   return (
-    <div className={`flex flex-col gap-6 lg:flex-row ${images.length === 0 ? "lg:items-end" : ""}`}>
+    <div className="flex flex-col gap-6 lg:flex-row">
       {/* Left: Large preview */}
       <div className="w-full lg:w-2/5">
-        <div className="sticky top-4">
+        <div className="flex flex-col gap-3 lg:sticky lg:top-4 lg:h-full">
           <div
-            className="relative aspect-[3/4] overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-800"
+            className="relative aspect-[3/4] overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-800 lg:aspect-auto lg:flex-1 lg:min-h-0"
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
           >
