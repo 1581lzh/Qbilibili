@@ -114,8 +114,8 @@ H:\bilibili/
 │   │       ├── video-delete-button.tsx    # 删除视频按钮
 │   │       ├── recommendations.tsx        # 推荐列表（cachedFetch 客户端缓存 + 作者头像）
 │   │       ├── comment-section.tsx        # 评论区（图片/GIF 粘贴上传 + 粘贴净化（纯文本）+ 乐观更新 + 回车发送 + 2.5行输入框）
-│   │       ├── comment-images.tsx         # 评论图片展示组件（单图等比显示、多图 1:1 方形裁切缩略图）
-│   │       └── image-lightbox.tsx         # 图片灯箱组件（全屏查看 + 键盘导航）
+│   │       ├── comment-images.tsx         # 评论图片展示组件（单图等比显示、多图 1:1 正方形 3 列网格，max-w-[450px] 移动端等宽自适应）
+│   │       └── image-lightbox.tsx         # 图片灯箱组件（相册式三页轨道滑动切换 + 缩放 0.5-5 倍 + 双击状态机 + 系统返回关闭）
 │   ├── lib/                   # 工具函数
 │   │   ├── auth.ts            # NextAuth 配置 + getSession() 安全封装
 │   │   ├── db.ts              # Prisma 客户端
@@ -581,7 +581,7 @@ sudo firewall-cmd --reload
 31. **头像链接优化** — 移动端头像点击切换菜单，桌面端头像点击跳转个人主页
 32. **弱网交互优化** — 点赞/收藏/评论乐观更新（即时响应）、页面骨架屏（loading.tsx）、代码分割（next/dynamic 懒加载）、播放器预加载、API 缓存头、客户端 fetch 缓存
 33. **毛玻璃效果** — 下拉菜单 `backdrop-blur-xl` 直接模糊页面内容，弹窗遮罩分离模糊层与内容层（blur 静态 + opacity GPU 动画）
-34. **评论图片附件** — 每条评论最多 7 张图片，文字可选；单图等比显示，多图 1:1 方形裁切缩略图（桌面端约 145px）+ 移动端溢出 "+N" 标记；全屏灯箱查看原图（键盘导航、ESC 关闭）
+34. **评论图片附件** — 每条评论最多 7 张图片，文字可选；单图等比显示，多图 1:1 正方形 3 列缩略图网格（max-w-[450px]，移动端等宽自适应）+ 移动端溢出 "+N" 标记；全屏灯箱查看（相册式三页轨道滑动切换、缩放 0.5-5 倍、系统返回键关闭）
 35. **图文播放优化** — 播放/暂停图标正确显示（暂停显示▶，播放显示⏸）；浏览器阻止自动播放时自动降级到暂停状态，用户交互后恢复
 36. **音频响度标准化** — 上传视频后自动使用 FFmpeg loudnorm（EBU R128，-14 LUFS）标准化音频响度，支持 OSS 和 VOD 两种视频来源，异步队列处理，非阻塞播放；启动时自动回填未处理的旧视频
 37. **Emoji 支持** — 评论/投稿支持 Unicode emoji 和抖音表情包，emoji 选择器面板（分类浏览 + 搜索），contentEditable 实时预览 emoji 图片，抖音表情包 214 个（存储在 public/emoji/douyin/），B站格式兼容（`:表情名:`语法）
@@ -593,7 +593,7 @@ sudo firewall-cmd --reload
   - **存储**：Video 表新增 `livePhotoVideos` 字段（JSON 数组，与 imageUrls 一一对应，`""` 表示静态图），实况视频段以 video 类型上传 OSS
   - **播放**：轮播到实况图自动静音播放视频，对应进度条一节显示视频实时进度（timeupdate 驱动，非倒计时）；视频完整播完后再切下一张，融入轮播节奏；背景音乐保持正常播放（仅视频静音）
   - **播放阶段机**：实况图播放流程为 `static-preview（1s封面）→ live-fade-in（交叉淡化）→ 视频播放 → live-fade-out（交叉淡化）→ static-preview（1s封面）→ 循环`。用链式定时器 + epoch 守卫推进；单图 loop 用 `liveRestartTick` 信号触发重播（currentIndex 不变时 React 不重渲染）；实况结束用 React 原生 `onEnded` 绑定
-  - **渲染实现（单 canvas 像素级混合）**：真 `<video>` `opacity:0` + `absolute inset-0` 隐藏仅作帧源（继续硬件解码、驱动 `onEnded`/进度条/首帧），新增 `<canvas>` `absolute inset-0` 用 `requestAnimationFrame` 逐帧 `drawImage` 镜像视频；同一画布里用 `globalAlpha` 同时绘制「封面帧（`1-fade`）+ 实况帧（`fade`）」实现像素级半透明交叉淡化，不依赖任何元素层叠关系。封面 `<img>` 常驻渲染并置于 canvas 下方（`z-11` < canvas `z-12`），作为 canvas 首帧绘制前的无缝底衬（消除淡入空档闪烁）；封面帧用 `Image` 对象绘制（同 URL 走缓存），`drawImage` 按 `object-contain` 等比缩放居中（`Math.min`）。淡入淡出用 `easeInOutQuad` 缓动（`liveFadeRef` + `fadeAnimRef`），首帧 `loadeddata` 后再淡入、1.5s 兜底防卡死。**踩坑记录**：canvas 必须用 `absolute inset-0`（`relative` 不脱离文档流会被挤到容器外裁掉）；Edge 下 `opacity:0` 的独立合成层（`will-change` 等）仍会遮挡下方内容，故不可依赖封面 img 层叠做淡化
+  - **渲染实现（单 canvas 像素级混合）**：真 `<video>` `opacity:0` + `absolute inset-0` 隐藏仅作帧源（继续硬件解码、驱动 `onEnded`/进度条/首帧），新增 `<canvas>` `absolute inset-0` 用 `requestAnimationFrame` 逐帧 `drawImage` 镜像视频；同一画布里用 `globalAlpha` 同时绘制「封面帧（`1-fade`）+ 实况帧（`fade`）」实现像素级半透明交叉淡化，不依赖任何元素层叠关系。封面 `<img>` 常驻渲染并置于 canvas 下方（`z-11` < canvas `z-12`），作为 canvas 首帧绘制前的无缝底衬（消除淡入空档闪烁）；封面帧用 `Image` 对象绘制（同 URL 走缓存），`drawImage` 按 `object-contain` 等比缩放居中（`Math.min`）。淡入淡出用 `easeInOutQuad` 缓动（`liveFadeRef` + `fadeAnimRef`），首帧 `loadeddata` 后再淡入、1.5s 兜底防卡死。**踩坑记录**：canvas 必须用 `absolute inset-0`（`relative` 不脱离文档流会被挤到容器外裁掉）；Edge 下 `opacity:0` 的独立合成层（`will-change` 等）仍会遮挡下方内容，故不可依赖封面 img 层叠做淡化。详细分析见 [CROSSFADE-ISSUE.md](./CROSSFADE-ISSUE.md)
   - **暂停保留进度原地暂停** — 实况播放中暂停不再跳回封面：阶段机暂停分支 `video.pause()` 原地冻结画面与进度，恢复时从当前位置续播（恰好在播完淡出时刻暂停则重新淡入从头播）；独立播放 effect 加 `isPlaying` 守卫，元数据/进度监听拆独立 effect 驱动
   - **时长分配**：自动模式下静态图时长 = `(总音频时长 - 实况视频总时长) / 静态图数`，实况图 = 视频完整时长，避免有的长有的短
   - **封面**：实况只能用静态帧（图片本身）做封面，不提供动图封面
@@ -667,10 +667,13 @@ sudo firewall-cmd --reload
   - 图片选择：支持文件选择器、Ctrl+V 粘贴上传、粘贴图片 URL（HTML `<img>`/uri-list/纯文本链接自动下载）
   - 图片压缩：超过 8MB 自动压缩（Canvas API），压缩后仍超限则提示用户；**GIF 不压缩**（canvas 压缩会破坏动画，超限直接提示更换）
   - 单图布局：等比显示（`object-contain`，max-width 280px / max-height 240px），悬停显示放大图标，不裁切（GIF 动图完整显示）
-  - 多图布局：每张 1:1 方形裁切（`object-cover`，桌面端 145px / 移动端 112px），flex-wrap 排列，GIF 完整显示不裁切
+  - 多图布局：1:1 正方形 3 列网格（`aspect-square` + `grid-cols-3`，`max-w-[450px]` 移动端也等宽自适应），替代原 flex-wrap 固定 145px 尺寸，GIF 完整显示不裁切
   - 移动端溢出：第 4-7 张隐藏，最后一张显示 "+N" 标记
-  - 灯箱组件：全屏查看原图，键盘左右箭头切换，ESC 关闭，遮罩点击关闭
-  - 灯箱缩放：鼠标滚轮缩放，+/- 按钮缩放，键盘 +/- 快捷键，双击切换缩放，拖拽平移，移动端双指捏合缩放
+  - 灯箱组件：与图文播放器一致的三页轨道布局（前后相邻页并排常驻、头尾循环），移动端单指滑动/桌面端鼠标拖拽实时跟手，松手超过 1/4 页宽滑入相邻页否则回弹；键盘左右箭头切换，ESC/遮罩点击关闭；打开时 `history.pushState` 压入标记，移动端系统返回键触发 popstate 直接关闭灯箱并重新压入标记，不退回上一页
+  - 灯箱缩放：鼠标滚轮/+/- 按钮/键盘快捷键缩放，拖拽平移，移动端双指捏合缩放
+  - 缩放实现（关键）：pinch 为增量式累加（每帧位移 ×0.01），连续跟手无跳档；缩放只改交互语义（拖动 = 平移）不改 DOM 结构（display 恒为三页轨道），避免 pinch 跨过 1±0.05 阈值重建 DOM 导致闪顿/缩放中断；所有写 scale 统一走 `setScaleSync`（同步 scaleRef 与 state），手势判定永远读最新值（原 useEffect 滞后）
+  - 双击缩放状态机：双击唯一入口是原生 touchend/pointerup 的 handleTap（彻底移除 React onDoubleClick——移动端浏览器会合成 dblclick 与原生判定双触发导致 toggle 两次：双击过快变 250% 而非 100%）；单击设 300ms pending 超时作废（单击永不触发缩放），双击后 350ms busy 冷却过滤连击误判
+  - 缩放范围：0.5x - 5x（支持缩小至 0.5 倍查看），缩放指示器/计数器 z-index 修复不被遮挡
 
 ### 视频播放器
 - 统一使用 Aliplayer 2.25.1 播放所有视频（VOD 和 OSS），不再使用原生 `<video>` 标签
@@ -794,7 +797,7 @@ sudo firewall-cmd --reload
 - **控件弹层不裁切**：音量条/模式提示弹层移出 `overflow-hidden` 裁切层，作为控制栏兄弟节点渲染；`useLayoutEffect` 测量按钮相对播放器容器的位置（`getBoundingClientRect` 差值）做绝对定位，弹层显示/容器尺寸变化时自动重算，全屏/缩放不错位
 - **三页轨道 key 唯一性（2 张图边界修复）**：轨道列表 `[prevIdx, currentIndex, nextIdx].map()` 的 `key` 须用**槽位 slot（0/1/2）**而非图片序号 —— 当只有 2 张图时 `prevIdx === nextIdx`，若以图片序号做 key（`key={page-${idx}}`）会因 `page-1`/`page-0` 重复导致 React DOM 复用错乱：计数器跳对但主图不更新（仍显示上一张）、相邻页元素意外残留（DOM 出现第 4 页）。表现为「切换后图片显示一致」「02 该暗却亮」（实际一直显示亮的 01）。改用 `key={page-slot-${slot}}` 后三槽恒唯一，DOM 结构稳定，React 仅更新各槽位 `src`，2 张图切换恢复正常
 
-### 深浅模式圆形遮罩扩散
+### 深浅色圆形遮罩扩散
 - 点击切换按钮 → 在按钮位置生成纯色圆（目标主题 body 背景色 `#fff` / `#09090b`），`z-index:-1` 背景层，只遮空白/骨架区域，不遮挡卡片/按钮/视频/文字
 - rAF 恒定速度（2200px/s）扩散，`scale(currentR/radius)` 从 0→1；圆基准尺寸 `radius*2`（注意不能设 0 尺寸，否则放大不可见）
 - 圆中圆：中途再点生成相反颜色圆叠在上面（数组尾 = 最上层），同速扩散；最上层圆覆盖全屏时一次性切换 `.dark`（只按最后一次颜色切一次）
