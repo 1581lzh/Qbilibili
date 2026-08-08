@@ -6,6 +6,13 @@
 
 ## 已完成工作
 
+### 本次会话（评论图片预览 PC 5 列 + 灯箱鼠标双击缩放）
+- **评论图片预览网格 PC 端 5 列** — comment-images.tsx 移动端保持 3 列，PC（sm+ 断点）改为 5 列（`sm:max-w-[750px] sm:grid-cols-5 sm:gap-1.5`）；溢出小标移动端第 3 格、PC 端第 5 格显示 `+N`（黑底白字，`+溢出数`）；可见性规则升级：`i >= 5` 全部隐藏、`i >= 3` 移动端隐藏 PC（sm:block）显示，改用变量 `PC_MAX_VISIBLE = 5`
+  - 部署坑：本轮为纯 CSS 类改动，编译产物此前未包含该类是线上不生效的根因——生产更新必须 `npm run build` 重新构建，不能只重启服务
+- **灯箱鼠标双击缩放改原生 dblclick** — image-lightbox.tsx 鼠标分支改为 `container.addEventListener("dblclick")` 原生监听（浏览器按平台阈值判定最可靠），双击图片在 250% 与 100% 之间切换（未缩放→放大 250%，已缩放→复原），与触摸双击行为一致；触摸分支保持 handleTap 状态机不变（原鼠标复用触摸 touchend 状态机的 pointerup 分支可靠性差）
+- **防双触发 lastTouchTimeRef** — 新增 ref 记录最近触摸时间，dblclick 触发时若 800ms 内有触摸则忽略（移动端浏览器会为快速两次触摸合成 dblclick，避免与 touchend 判定重复 toggle）
+- **单击图片误关灯箱修复** — 新增 `pointerOnImageRef`：pointerdown 记录按下点是否在图片上，容器 onClick 用它拦截——根因是 `setPointerCapture` 会把随后的 click 事件重定向到容器元素，绕过 page div 的 stopPropagation，单击图片直接 close()
+
 ### 本次会话（评论图片灯箱升级 + 预览网格移动端自适应）
 - **灯箱相册式滑动切换** — 评论图片灯箱与图文播放器一致的三页轨道布局（前后相邻页并排常驻、头尾循环），移动端单指滑动/桌面端鼠标拖拽实时跟手，松手超过 1/4 页宽滑入相邻页否则回弹（image-lightbox.tsx）
 - **灯箱缩放重构（关键修复）** — pinch 缩放改为增量式累加（每帧位移 ×0.01），连续跟手无跳档；缩放不与 DOM 结构绑定（display 恒为三页轨道，缩放只改交互语义：拖动 = 平移），避免 pinch 跨过 1±0.05 阈值时 DOM 重建导致的闪顿/缩放中断；新增 setScaleSync 统一同步 scaleRef 与 state，手势判定永远读最新值（原 useEffect 滞后会读到陈旧值）

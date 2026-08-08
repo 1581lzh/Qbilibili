@@ -114,8 +114,8 @@ H:\bilibili/
 │   │       ├── video-delete-button.tsx    # 删除视频按钮
 │   │       ├── recommendations.tsx        # 推荐列表（cachedFetch 客户端缓存 + 作者头像）
 │   │       ├── comment-section.tsx        # 评论区（图片/GIF 粘贴上传 + 粘贴净化（纯文本）+ 乐观更新 + 回车发送 + 2.5行输入框）
-│   │       ├── comment-images.tsx         # 评论图片展示组件（单图等比显示、多图 1:1 正方形 3 列网格，max-w-[450px] 移动端等宽自适应）
-│   │       └── image-lightbox.tsx         # 图片灯箱组件（相册式三页轨道滑动切换 + 缩放 0.5-5 倍 + 双击状态机 + 系统返回关闭）
+│   │       ├── comment-images.tsx         # 评论图片展示组件（单图等比显示、多图 1:1 正方形网格：移动端 3 列 / PC 5 列，溢出 +N 小标）
+│   │       └── image-lightbox.tsx         # 图片灯箱组件（相册式三页轨道滑动切换 + 缩放 0.5-5 倍 + 鼠标原生 dblclick / 触摸状态机双击 + 系统返回关闭）
 │   ├── lib/                   # 工具函数
 │   │   ├── auth.ts            # NextAuth 配置 + getSession() 安全封装
 │   │   ├── db.ts              # Prisma 客户端
@@ -581,7 +581,7 @@ sudo firewall-cmd --reload
 31. **头像链接优化** — 移动端头像点击切换菜单，桌面端头像点击跳转个人主页
 32. **弱网交互优化** — 点赞/收藏/评论乐观更新（即时响应）、页面骨架屏（loading.tsx）、代码分割（next/dynamic 懒加载）、播放器预加载、API 缓存头、客户端 fetch 缓存
 33. **毛玻璃效果** — 下拉菜单 `backdrop-blur-xl` 直接模糊页面内容，弹窗遮罩分离模糊层与内容层（blur 静态 + opacity GPU 动画）
-34. **评论图片附件** — 每条评论最多 7 张图片，文字可选；单图等比显示，多图 1:1 正方形 3 列缩略图网格（max-w-[450px]，移动端等宽自适应）+ 移动端溢出 "+N" 标记；全屏灯箱查看（相册式三页轨道滑动切换、缩放 0.5-5 倍、系统返回键关闭）
+34. **评论图片附件** — 每条评论最多 7 张图片，文字可选；单图等比显示，多图 1:1 正方形缩略图网格（移动端 3 列 / PC 5 列，均带溢出 "+N" 小标）；全屏灯箱查看（相册式三页轨道滑动切换、缩放 0.5-5 倍、鼠标原生 dblclick 双击缩放、系统返回键关闭）
 35. **图文播放优化** — 播放/暂停图标正确显示（暂停显示▶，播放显示⏸）；浏览器阻止自动播放时自动降级到暂停状态，用户交互后恢复
 36. **音频响度标准化** — 上传视频后自动使用 FFmpeg loudnorm（EBU R128，-14 LUFS）标准化音频响度，支持 OSS 和 VOD 两种视频来源，异步队列处理，非阻塞播放；启动时自动回填未处理的旧视频
 37. **Emoji 支持** — 评论/投稿支持 Unicode emoji 和抖音表情包，emoji 选择器面板（分类浏览 + 搜索），contentEditable 实时预览 emoji 图片，抖音表情包 214 个（存储在 public/emoji/douyin/），B站格式兼容（`:表情名:`语法）
@@ -667,12 +667,16 @@ sudo firewall-cmd --reload
   - 图片选择：支持文件选择器、Ctrl+V 粘贴上传、粘贴图片 URL（HTML `<img>`/uri-list/纯文本链接自动下载）
   - 图片压缩：超过 8MB 自动压缩（Canvas API），压缩后仍超限则提示用户；**GIF 不压缩**（canvas 压缩会破坏动画，超限直接提示更换）
   - 单图布局：等比显示（`object-contain`，max-width 280px / max-height 240px），悬停显示放大图标，不裁切（GIF 动图完整显示）
-  - 多图布局：1:1 正方形 3 列网格（`aspect-square` + `grid-cols-3`，`max-w-[450px]` 移动端也等宽自适应），替代原 flex-wrap 固定 145px 尺寸，GIF 完整显示不裁切
-  - 移动端溢出：第 4-7 张隐藏，最后一张显示 "+N" 标记
+  - 多图布局：1:1 正方形网格（`aspect-square`），移动端 3 列（`grid-cols-3` + `max-w-[450px]`），PC 端 5 列（`sm:max-w-[750px] sm:grid-cols-5 sm:gap-1.5`），替代原 flex-wrap 固定 145px 尺寸，GIF 完整显示不裁切
+  - 溢出小标：`i >= 5` 的图片全部隐藏；`i >= 3` 移动端隐藏、PC（sm:block）显示；超过上限时第 3 格（移动端）/第 5 格（PC）用黑底白字显示 `+溢出数`，上限常量 `PC_MAX_VISIBLE = 5`
+  - **注意**：该网格为纯 CSS 类改动，Tailwind 编译产物未包含新增类时线上不生效，生产更新必须 `npm run build`（重启服务无效）
   - 灯箱组件：与图文播放器一致的三页轨道布局（前后相邻页并排常驻、头尾循环），移动端单指滑动/桌面端鼠标拖拽实时跟手，松手超过 1/4 页宽滑入相邻页否则回弹；键盘左右箭头切换，ESC/遮罩点击关闭；打开时 `history.pushState` 压入标记，移动端系统返回键触发 popstate 直接关闭灯箱并重新压入标记，不退回上一页
   - 灯箱缩放：鼠标滚轮/+/- 按钮/键盘快捷键缩放，拖拽平移，移动端双指捏合缩放
   - 缩放实现（关键）：pinch 为增量式累加（每帧位移 ×0.01），连续跟手无跳档；缩放只改交互语义（拖动 = 平移）不改 DOM 结构（display 恒为三页轨道），避免 pinch 跨过 1±0.05 阈值重建 DOM 导致闪顿/缩放中断；所有写 scale 统一走 `setScaleSync`（同步 scaleRef 与 state），手势判定永远读最新值（原 useEffect 滞后）
-  - 双击缩放状态机：双击唯一入口是原生 touchend/pointerup 的 handleTap（彻底移除 React onDoubleClick——移动端浏览器会合成 dblclick 与原生判定双触发导致 toggle 两次：双击过快变 250% 而非 100%）；单击设 300ms pending 超时作废（单击永不触发缩放），双击后 350ms busy 冷却过滤连击误判
+  - 双击缩放状态机：**触摸分支**唯一入口是原生 touchend/pointerup 的 handleTap（彻底移除 React onDoubleClick——移动端浏览器会合成 dblclick 与原生判定双触发导致 toggle 两次：双击过快变 250% 而非 100%）；单击设 300ms pending 超时作废（单击永不触发缩放），双击后 350ms busy 冷却过滤连击误判
+  - 鼠标双击缩放（原生 dblclick）：**鼠标分支**不再复用触摸 handleTap，改用 `container.addEventListener("dblclick")`（浏览器按平台阈值判定最可靠），双击图片在 250% 与 100% 间切换（未缩放→250%，已缩放→100%），与触摸双击行为一致
+  - 防双触发 `lastTouchTimeRef`：记录最近触摸时间，dblclick 触发时若 800ms 内有触摸则忽略（移动端浏览器会为快速两次触摸合成 dblclick，避免与 touchend 判定重复 toggle）
+  - 单击图片误关灯箱修复：新增 `pointerOnImageRef`（pointerdown 记录按下点是否在图片上），容器 onClick 据此拦截——根因是 `setPointerCapture` 会把随后的 click 事件重定向到容器元素，绕过 page div 的 stopPropagation，导致单击图片直接 close()
   - 缩放范围：0.5x - 5x（支持缩小至 0.5 倍查看），缩放指示器/计数器 z-index 修复不被遮挡
 
 ### 视频播放器

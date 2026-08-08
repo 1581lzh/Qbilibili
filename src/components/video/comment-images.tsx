@@ -48,17 +48,27 @@ export default function CommentImages({ images, onImageClick }: CommentImagesPro
   }
 
   const MOBILE_MAX_VISIBLE = 3;
+  const PC_MAX_VISIBLE = 5;
   const mobileOverflow = images.length > MOBILE_MAX_VISIBLE;
   const mobileOverflowCount = images.length - MOBILE_MAX_VISIBLE;
+  const pcOverflow = images.length > PC_MAX_VISIBLE;
+  const pcOverflowCount = images.length - PC_MAX_VISIBLE;
 
   return (
-    <div className="mt-2 grid max-w-[450px] grid-cols-3 gap-1 sm:gap-1.5">
+    <div className="mt-2 grid max-w-[450px] grid-cols-3 gap-1 sm:max-w-[750px] sm:grid-cols-5 sm:gap-1.5">
       {images.map((src, i) => {
         const isLastMobileVisible = mobileOverflow && i === MOBILE_MAX_VISIBLE - 1;
+        const isLastPcVisible = pcOverflow && i === PC_MAX_VISIBLE - 1;
+        const visibilityClass =
+          i >= PC_MAX_VISIBLE
+            ? 'hidden sm:hidden'
+            : i >= MOBILE_MAX_VISIBLE
+              ? 'hidden sm:block'
+              : '';
         return (
           <div
             key={i}
-            className={`group relative aspect-square w-full cursor-pointer overflow-hidden rounded-md ${i >= MOBILE_MAX_VISIBLE ? 'hidden sm:block' : ''}`}
+            className={`group relative aspect-square w-full cursor-pointer overflow-hidden rounded-md ${visibilityClass}`}
             onClick={() => onImageClick(i)}
             onMouseEnter={() => setHoveredIndex(i)}
             onMouseLeave={() => setHoveredIndex(null)}
@@ -92,6 +102,11 @@ export default function CommentImages({ images, onImageClick }: CommentImagesPro
             {isLastMobileVisible && (
               <div className="absolute bottom-0 right-0 flex items-center justify-center rounded-tl-md bg-black/60 px-1.5 py-0.5 text-xs font-medium text-white sm:hidden">
                 +{mobileOverflowCount}
+              </div>
+            )}
+            {isLastPcVisible && (
+              <div className="absolute bottom-0 right-0 hidden items-center justify-center rounded-tl-md bg-black/60 px-1.5 py-0.5 text-xs font-medium text-white sm:flex">
+                +{pcOverflowCount}
               </div>
             )}
           </div>

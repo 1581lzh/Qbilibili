@@ -44,6 +44,12 @@ export function ImageLightbox({
   // 与 lastDoubleTapRef(350ms busy) 共同保证：单击永不触发、双击只 toggle 一次。
   const tapPendingRef = useRef(false);
   const tapPendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // pointer capture 后 click 会派发到容器而非原始目标，用它记住按下时是否在图片上
+  const pointerOnImageRef = useRef(false);
+
+  // 最近一次触摸发生的时间：鼠标 dblclick 监听的触摸合成兜底（800ms 内忽略），
+  // 防止移动端浏览器为快速两次触摸合成的 dblclick 与 touchend 判定双触发。
+  const lastTouchTimeRef = useRef(0);
 
   // 双指捏合缩放状态
   const pinchDistanceRef = useRef(0);
@@ -251,6 +257,7 @@ export function ImageLightbox({
       if (e.pointerType !== "mouse") return;
       if (e.button !== 0) return;
       const t = e.target as HTMLElement;
+      pointerOnImageRef.current = !!t.closest("img");
       if (t.closest("button") || t.closest("a")) return;
       if (isSlidingRef.current) return;
       isDraggingRef.current = true;
@@ -295,10 +302,25 @@ export function ImageLightbox({
       if (dragMovedRef.current) {
         if (!isZoomedScale(scaleRef.current)) settleDragRef.current();
         window.setTimeout(() => { dragMovedRef.current = false; }, 0);
+      }
+      // 鼠标双击缩放不在这处理：改用原生 dblclick（详情见下），
+      // 避免浏览器对两次 click 合成的 dblclick 与本处判定双触发。
+    };
+
+    // 鼠标双击缩放（原生 dblclick，浏览器按平台阈值判定，最可靠）。
+    // 触摸缩放的唯一入口是 touchend 的 handleTap；移动端浏览器也会为快速两次
+    // 触摸合成 dblclick，故带触摸时间窗兜底：最近 800ms 内有触摸则忽略，
+    // 防止触摸双击在这里重复 toggle。
+    const onMouseDblClick = (e: MouseEvent) => {
+      if (e.detail !== 2) return;
+      if (Date.now() - lastTouchTimeRef.current < 800) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (isZoomedScale(scaleRef.current)) {
+        resetZoom();
       } else {
-        // 鼠标单击/双击：复用统一 tap 判定。React onDoubleClick 已移除，
-        // 避免移动端合成 dblclick 与原生判定双触发。
-        handleTap();
+        setScaleSync(2.5);
+        setPosition({ x: 0, y: 0 });
       }
     };
 
@@ -311,6 +333,7 @@ export function ImageLightbox({
     const isZoomedScale = (s: number) => Math.abs(s - 1) > 0.05;
 
     const onTouchStart = (e: TouchEvent) => {
+      lastTouchTimeRef.current = Date.now();
       const t = e.touches;
       if (t.length >= 2) {
         // 双指 = 捏合缩放（无论之前在拖动什么都立即转入 pinch）
@@ -491,6 +514,7 @@ export function ImageLightbox({
     container.addEventListener("touchmove", onTouchMove, { passive: false });
     container.addEventListener("touchend", onTouchEnd);
     container.addEventListener("touchcancel", onTouchEnd);
+    container.addEventListener("dblclick", onMouseDblClick);
 
     return () => {
       container.removeEventListener("pointerdown", onPointerDown);
@@ -500,6 +524,7 @@ export function ImageLightbox({
       container.removeEventListener("touchmove", onTouchMove);
       container.removeEventListener("touchend", onTouchEnd);
       container.removeEventListener("touchcancel", onTouchEnd);
+      container.removeEventListener("dblclick", onMouseDblClick);
       ro.disconnect();
     };
   }, [resetZoom]);
@@ -530,6 +555,7 @@ export function ImageLightbox({
       style={{ backgroundColor: "rgba(0,0,0,0.85)", touchAction: "none", cursor: zoomed ? "grab" : "grab" }}
       onClick={(e) => {
         if (dragMovedRef.current) { dragMovedRef.current = false; return; }
+        if (pointerOnImageRef.current) { pointerOnImageRef.current = false; return; }
         close();
       }}
     >
