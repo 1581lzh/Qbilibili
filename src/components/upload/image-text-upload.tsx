@@ -6,7 +6,7 @@ import { CompressDialog } from "@/components/ui/compress-dialog";
 import { compressImage, needsCompression, formatFileSize } from "@/lib/image-compress";
 import { MusicPlayer } from "@/components/upload/music-player";
 import EmojiPicker from "@/components/ui/emoji-picker";
-import { insertTextAtCursor } from "@/lib/emoji";
+import EmojiInput, { type EmojiInputHandle } from "@/components/ui/emoji-input";
 
 export interface ImageItem {
   file: File;
@@ -155,8 +155,8 @@ export function ImageTextUploadPage({
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const imagesInputRef = useRef<HTMLInputElement>(null);
   const musicInputRef = useRef<HTMLInputElement>(null);
-  const titleRef = useRef<HTMLInputElement>(null);
-  const descRef = useRef<HTMLTextAreaElement>(null);
+  const titleRef = useRef<EmojiInputHandle>(null);
+  const descRef = useRef<EmojiInputHandle>(null);
 
   const MAX_IMAGES = 40;
   const MAX_AUDIO = 3;
@@ -571,17 +571,16 @@ export function ImageTextUploadPage({
           <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
             标题 *
           </label>
-          <input
+          <EmojiInput
             ref={titleRef}
-            type="text"
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="请输入标题"
+            onChange={setTitle}
             maxLength={80}
-            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"
+            placeholder="请输入标题"
+            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
           />
           <div className="mt-1 flex items-center justify-between">
-            <EmojiPicker onSelect={(emoji) => insertTextAtCursor(titleRef, emoji)} />
+            <EmojiPicker onSelect={(emoji, html) => titleRef.current?.insert(emoji, html)} />
             <p className="text-xs text-zinc-400">{title.length}/80</p>
           </div>
         </div>
@@ -591,20 +590,17 @@ export function ImageTextUploadPage({
           <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
             描述
           </label>
-          <textarea
+          <EmojiInput
             ref={descRef}
             value={description}
-            onChange={(e) => {
-              const val = e.target.value;
-              if (val.length <= 1000) setDescription(val);
-            }}
-            placeholder="添加描述（选填，最多 1000 字）"
-            rows={3}
+            onChange={setDescription}
             maxLength={1000}
-            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"
+            multiline
+            placeholder="添加描述（选填，最多 1000 字）"
+            className="min-h-[84px] w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
           />
           <div className="mt-1 flex items-center justify-between">
-            <EmojiPicker onSelect={(emoji) => insertTextAtCursor(descRef, emoji)} />
+            <EmojiPicker onSelect={(emoji, html) => descRef.current?.insert(emoji, html)} />
             <p className="text-xs text-zinc-400">{description.length}/1000</p>
           </div>
         </div>
@@ -863,7 +859,7 @@ export function ImageTextUploadPage({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setImageDuration(5)}
+                  onClick={() => setImageDuration(3)}
                   className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
                     imageDuration !== null
                       ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-100"

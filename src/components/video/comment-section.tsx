@@ -9,7 +9,7 @@ import CommentImages from "./comment-images";
 import { ImageLightbox } from "./image-lightbox";
 import { compressImage, formatFileSize } from "@/lib/image-compress";
 import EmojiPicker from "@/components/ui/emoji-picker";
-import { insertHtmlAtCursor, getContentEditableText, clearContentEditable } from "@/lib/emoji";
+import { insertHtmlAtCursor, getContentEditableCodeText, clearContentEditable } from "@/lib/emoji";
 import { renderEmojiText } from "@/lib/emoji-data";
 import { avatarColorFor } from "@/lib/avatar";
 
@@ -474,7 +474,7 @@ export default function CommentSection({ videoId }: { videoId: string }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const currentContent = getContentEditableText(textareaRef);
+    const currentContent = getContentEditableCodeText(textareaRef.current);
     if ((!currentContent.trim() && selectedImages.length === 0 && !textareaRef.current?.querySelector("img")) || loading) return;
     const input = currentContent;
     const tempImages = [...selectedImages, ...(await collectEmbeddedImages(textareaRef))];
@@ -540,7 +540,7 @@ export default function CommentSection({ videoId }: { videoId: string }) {
   };
 
   const handleReply = async (parentId: string) => {
-    const currentReplyContent = getContentEditableText(replyTextareaRef);
+    const currentReplyContent = getContentEditableCodeText(replyTextareaRef.current);
     if ((!currentReplyContent.trim() && replySelectedImages.length === 0 && !replyTextareaRef.current?.querySelector("img")) || replyLoading) return;
     const input = currentReplyContent;
     const tempImages = [...replySelectedImages, ...(await collectEmbeddedImages(replyTextareaRef))];

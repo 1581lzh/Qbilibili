@@ -7,7 +7,7 @@ import { motion } from "framer-motion";
 import { useAuthModal } from "@/components/auth/auth-modal-context";
 import { optimizedCover } from "@/lib/image";
 import EmojiPicker from "@/components/ui/emoji-picker";
-import { insertTextAtCursor } from "@/lib/emoji";
+import EmojiInput, { type EmojiInputHandle } from "@/components/ui/emoji-input";
 
 interface VideoData {
   id: string;
@@ -47,8 +47,8 @@ export default function EditVideoPage() {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [selectedCoverIndex, setSelectedCoverIndex] = useState<number | null>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
-  const titleRef = useRef<HTMLInputElement>(null);
-  const descRef = useRef<HTMLTextAreaElement>(null);
+  const titleRef = useRef<EmojiInputHandle>(null);
+  const descRef = useRef<EmojiInputHandle>(null);
 
   // Cleanup cover preview on unmount
   useEffect(() => {
@@ -278,17 +278,16 @@ export default function EditVideoPage() {
             <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
               标题 *
             </label>
-            <input
+            <EmojiInput
               ref={titleRef}
-              type="text"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={setTitle}
               maxLength={100}
-              className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 focus:border-[#FB7299] focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
               placeholder="请输入标题"
+              className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 focus:border-[#FB7299] focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
             />
             <div className="mt-1 flex items-center justify-between">
-              <EmojiPicker onSelect={(emoji) => insertTextAtCursor(titleRef, emoji)} />
+              <EmojiPicker onSelect={(emoji, html) => titleRef.current?.insert(emoji, html)} />
               <div className="text-right text-xs text-zinc-400">
                 {title.length}/100
               </div>
@@ -300,20 +299,17 @@ export default function EditVideoPage() {
             <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
               描述
             </label>
-            <textarea
+            <EmojiInput
               ref={descRef}
               value={description}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val.length <= 1000) setDescription(val);
-              }}
+              onChange={setDescription}
               maxLength={1000}
-              rows={4}
-              className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 focus:border-[#FB7299] focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+              multiline
               placeholder="请输入描述（可选，最多 1000 字）"
+              className="min-h-[96px] w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-zinc-900 focus:border-[#FB7299] focus:outline-none dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
             />
             <div className="mt-1 flex items-center justify-between">
-              <EmojiPicker onSelect={(emoji) => insertTextAtCursor(descRef, emoji)} />
+              <EmojiPicker onSelect={(emoji, html) => descRef.current?.insert(emoji, html)} />
               <div className="text-right text-xs text-zinc-400">
                 {description.length}/1000
               </div>

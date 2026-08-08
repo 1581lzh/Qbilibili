@@ -96,7 +96,9 @@ H:\bilibili/
 │   │   ├── ui/                # 通用 UI 组件
 │   │   │   ├── confirm-dialog.tsx      # 确认弹窗组件（替代浏览器 confirm/alert）
 │   │   │   ├── compress-dialog.tsx     # 图片/音乐压缩确认弹窗
-│   │   │   └── emoji-picker.tsx        # Emoji 选择器面板（Unicode emoji + 抖音表情包）
+│   │   │   ├── emoji-picker.tsx        # Emoji 选择器面板（Unicode emoji + 抖音表情包）
+│   │   │   ├── emoji-text.tsx          # Emoji 文本统一显示组件（EmojiText，纯文本位置把 [code] 渲染为图形）
+│   │   │   └── emoji-input.tsx         # Emoji contentEditable 输入组件（实时预览 + getContentEditableCodeText 还原 [code] 文本）
 │   │   ├── layout/            # 布局组件
 │   │   │   └── header.tsx     # 页头组件（移动端搜索展开动画/深色切换/头像菜单）
 │   │   ├── providers.tsx      # 全局 Provider（AuthModal 通过 next/dynamic 懒加载）
@@ -141,7 +143,8 @@ H:\bilibili/
 │   │   ├── emoji-data.ts      # Unicode emoji 分类数据（按类别组织的 emoji 列表）
 │   │   ├── avatar.ts          # 头像颜色共享模块（avatarColorFor()，按用户名哈希生成统一头像色）
 │   │   ├── keyboard.ts        # 键盘控制守卫（isEditableTarget + isComposingEvent，输入态自动解除快捷键）
-│   │   └── douyin-emoji-data.ts # 抖音表情包数据（214个表情，名称+图片映射）
+│   │   ├── douyin-emoji-data.ts # 抖音表情包数据（214个表情，名称+图片映射）
+│   │   └── douyin-sprite.ts     # 抖音表情雪碧图工具（code→序号映射计算格子位置，导出 HTML 与 React style 两种渲染）
 │   ├── instrumentation.ts     # 服务器启动时初始化音频队列处理器
 │   ├── types/                 # TypeScript 类型定义
 │   │   └── index.ts           # 共享类型（Video/VideoWithAuthor/Comment/Reply 等）
@@ -154,6 +157,8 @@ H:\bilibili/
 │   ├── favicon.svg            # 站点图标（bilibili 风格播放按钮）
 │   ├── placeholder.svg        # 视频封面占位图（未上传封面时使用）
 │   ├── emoji/                 # Emoji 表情图片
+│   │   ├── douyin-sprite-a.webp  # 抖音表情雪碧图 A（前 64 个，20 列 × 4 行，每格 96px，约 161KB）
+│   │   ├── douyin-sprite-b.webp  # 抖音表情雪碧图 B（其余 150 个，20 列 × 8 行，每格 96px，约 368KB）
 │   │   └── douyin/            # 抖音表情包图片（214个，PNG 格式）
 │   └── lib/                   # 浏览器端 SDK
 │       ├── aliyun-upload-sdk-1.5.7.min.js  # VOD 上传 SDK
@@ -161,6 +166,8 @@ H:\bilibili/
 │       └── lib/
 │           ├── aliyun-oss-sdk-6.17.1.min.js
 │           └── es6-promise.min.js
+├── scripts/                   # 工具脚本
+│   └── gen-douyin-sprite.py   # 抖音表情雪碧图生成脚本（需 PIL，生成时逐格字节校验）
 ├── .env                       # 环境变量
 ├── next.config.ts             # Next.js 配置
 ├── tsconfig.json              # TypeScript 配置
@@ -598,6 +605,12 @@ sudo firewall-cmd --reload
   - **时长分配**：自动模式下静态图时长 = `(总音频时长 - 实况视频总时长) / 静态图数`，实况图 = 视频完整时长，避免有的长有的短
   - **封面**：实况只能用静态帧（图片本身）做封面，不提供动图封面
   - **编辑**：编辑页图片排序/删除时 livePhotoVideos 同步，保存时一并提交
+39. **Emoji 显示统一组件** — 新增 `src/components/ui/emoji-text.tsx`（EmojiText 组件）与 `src/lib/emoji-data.ts` 的 `renderEmojiText()`：标题/简介/搜索等所有纯文本展示位置统一把 `[微笑]` 这类 emoji 代码渲染为图形（Unicode 直接显示、抖音表情渲染雪碧图），保证输入后标题与正文里的 emoji 立即正确显示
+40. **EmojiInput contentEditable 输入组件** — 新增 `src/components/ui/emoji-input.tsx`：稿件标题/简介、编辑页使用 contentEditable 容器，插入的 emoji 实时显示图形，提交/提取时通过 `getContentEditableCodeText()` 还原为 `[code]` 文本存储；支持 maxLength 截断（不截断代码中间）、粘贴、IME 防抖
+41. **播放器启动即恢复音量/静音** — `src/components/video/video-player.tsx` 初始化时同步读取用户保存的音量与静音设置再开始播放，修复首帧声音以最大音量播放的闪跳
+42. **emoji 选择面板滚动行为修复** — `src/components/ui/emoji-picker.tsx` 面板内部滚动（滚轮/拖动滚动条）不再关闭面板；页面级滚动、失焦仍自动关闭面板
+43. **抖音 emoji 雪碧图（两张）** — 214 个表情拆成两张雪碧图：`public/emoji/douyin-sprite-a.webp`（前 64 个，20 列 × 4 行，约 161KB）与 `douyin-sprite-b.webp`（其余 150 个，20 列 × 8 行，约 368KB），每格 96px，按需加载（214 次请求减为最多 2 次）；新增 `src/lib/douyin-sprite.ts`（按 code→序号映射计算格子位置，导出 HTML 与 React style 两种渲染方式）；渲染用「透明 1×1 gif 的 `<img>`」承载（contentEditable 里 Backspace/Delete 可直接删除，空 span 不行）；背景尺寸/定位用**像素整数**（格子边长整数倍，避免小尺寸/非整数缩放下亚像素锯齿）；`scripts/gen-douyin-sprite.py`（需 PIL）生成时**逐格字节校验**（不带 mask 粘贴防止半透明边缘被背景混合变暗），顺序与 `src/lib/douyin-emoji-data.ts` 的 `DOUYIN_EMOJI_LIST` 一致
+44. **图文投稿默认轮播时长改为手动 3 秒** — `src/components/upload/image-text-upload.tsx` 轮播时长默认从"自动"改为"手动 3 秒"
 
 ### 图文播放器交互增强（本次会话）
 - **高斯模糊背景调亮** — 视频背景 `brightness(0.5)→0.9, opacity 0.85→1`；图文背景 `opacity-80→100, brightness-0.5→0.9`，消除偏暗

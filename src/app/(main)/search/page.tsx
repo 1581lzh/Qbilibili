@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import VideoCard from "@/components/video/video-card";
+import EmojiText from "@/components/ui/emoji-text";
 import { motion } from "framer-motion";
 import { optimizedCover } from "@/lib/image";
 
@@ -232,7 +233,7 @@ function SearchResults() {
                   </p>
 
                   <Link href={`/video/${comment.video.id}`} className="mt-2 inline-block text-xs text-[#FB7299] hover:underline">
-                    {comment.video.title.length > 40 ? comment.video.title.slice(0, 40) + "..." : comment.video.title}
+                    <EmojiText text={comment.video.title} max={40} />
                   </Link>
                 </div>
               </div>

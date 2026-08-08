@@ -59,6 +59,7 @@ Bilibili 风格视频平台 MVP，一天内通过自然语言描述完成最小�
 - 播放/暂停中心弹性动画
 - 用户注销功能（自定义确认弹窗，密码确认，递归删除所有数据）
 - Emoji 支持（评论/投稿支持 Unicode emoji 和抖音表情包，选择器面板分类浏览+搜索，contentEditable 实时预览，B站格式 `:表情名:` 兼容）
+- **抖音 emoji 雪碧图（两张）** — 214 个表情按列表顺序拆成 `public/emoji/douyin-sprite-a.webp`（前 64 个，20 列 x 4 行，约 161KB）和 `douyin-sprite-b.webp`（其余 150 个，20 列 x 8 行，约 368KB），每格 96px，按需加载；渲染用**透明 1x1 gif 的 `<img>`**（原子元素，contentEditable 里 Backspace/Delete 可直接删除，空 span 不行）承载背景雪碧图，背景尺寸/定位用**像素整数**（格子边长倍数，**格子下标是整数不可除以格子尺寸**）避免亚像素锯齿；`scripts/gen-douyin-sprite.py` 生成时逐格字节校验（不带 mask 粘贴保证半透明边缘不混暗），重新生成执行 `python3 scripts/gen-douyin-sprite.py`（需 PIL，顺序与 douyin-emoji-data.ts 列表一致）
 - 评论 GIF 上传（粘贴 GIF 转预览图可发送；兼容粘贴图片 URL 自动下载；GIF 不走压缩保动画，超8MB提示；评论图片等比显示不裁切）
 - 评论输入框 2.5 行高（可看到下一行文字，自动延展）
 - 头像颜色统一（所有位置按用户名哈希同色头像，个人中心/头像菜单/视频作者/评论/推荐/管理面板一致）

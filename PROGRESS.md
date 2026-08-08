@@ -6,6 +6,14 @@
 
 ## 已完成工作
 
+### 本次会话（Emoji 显示统一组件 + 雪碧图 + 播放器音量恢复）
+- **Emoji 显示统一组件** — 新增 `src/components/ui/emoji-text.tsx`（EmojiText 组件）与 `src/lib/emoji-data.ts` 的 `renderEmojiText()`：标题/简介/搜索等所有纯文本展示位置统一把 `[微笑]` 这类 emoji 代码渲染为图形（Unicode 直接显示、抖音表情渲染雪碧图），保证输入后标题与正文里的 emoji 立即正确显示
+- **EmojiInput contentEditable 输入组件** — 新增 `src/components/ui/emoji-input.tsx`：稿件标题/简介、编辑页使用 contentEditable 容器，插入的 emoji 实时显示图形，提交/提取时通过 `getContentEditableCodeText()` 还原为 `[code]` 文本存储；支持 maxLength 截断（不截断代码中间）、粘贴、IME 防抖
+- **播放器启动即恢复音量/静音** — `src/components/video/video-player.tsx` 初始化时同步读取用户保存的音量与静音设置再开始播放，修复首帧声音以最大音量播放的闪跳
+- **emoji 选择面板滚动行为修复** — `src/components/ui/emoji-picker.tsx` 面板内部滚动（滚轮/拖动滚动条）不再关闭面板；页面级滚动、失焦仍自动关闭面板
+- **抖音 emoji 雪碧图（两张）** — 214 个表情拆成两张雪碧图：`public/emoji/douyin-sprite-a.webp`（前 64 个，20 列×4 行，每格 96px，约 161KB）与 `douyin-sprite-b.webp`（其余 150 个，20 列×8 行，每格 96px，约 368KB），按需加载（214 次请求减为最多 2 次）；新增 `src/lib/douyin-sprite.ts`（按 code→序号映射计算格子位置，导出 HTML 与 React style 两种渲染方式）；渲染用「透明 1×1 gif 的 `<img>`」承载（contentEditable 里 Backspace/Delete 可直接删除，空 span 不行）；背景尺寸/定位用像素整数（格子边长整数倍，避免亚像素锯齿）；`scripts/gen-douyin-sprite.py`（需 PIL）生成时逐格字节校验（不带 mask 粘贴防止半透明边缘被背景混合变暗），顺序与 `src/lib/douyin-emoji-data.ts` 的 `DOUYIN_EMOJI_LIST` 列表一致
+- **图文投稿默认轮播时长改为手动 3 秒** — `src/components/upload/image-text-upload.tsx` 轮播时长默认从"自动"改为"手动 3 秒"
+
 ### 本次会话（描述折叠 + 投稿页布局调整 + 预览窗口拉伸修复）
 - **内容描述折叠功能（CollapsibleDescription）** — 视频播放页描述（视频/图文类型共用，video-play-section.tsx）
   - 判断规则：内容超过 1.5 行（超过 2 行，或第 2 行内容超过半行宽）时折叠

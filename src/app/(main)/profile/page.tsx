@@ -9,6 +9,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { optimizedCover } from "@/lib/image";
 import { setAutoPlayVideo, setHighlightComment } from "@/lib/signals";
 import { avatarColorFor } from "@/lib/avatar";
+import EmojiText from "@/components/ui/emoji-text";
 
 const TAB_SLIDE_VARIANTS = {
   enter: (dir: number) => ({ opacity: 0, x: dir * 60 }),
@@ -271,7 +272,7 @@ export default function ProfilePage() {
               />
             </div>
             <h3 className="mt-1.5 line-clamp-2 text-sm font-medium text-zinc-900 dark:text-zinc-100 group-hover:text-[#FB7299]">
-              {v.title}
+              <EmojiText text={v.title} />
             </h3>
             <p className="mt-0.5 text-xs text-zinc-500">{v._count.likes} 赞</p>
           </Link>
@@ -433,7 +434,7 @@ export default function ProfilePage() {
                           />
                         </div>
                         <h3 className="mt-1.5 line-clamp-2 text-sm font-medium text-zinc-900 dark:text-zinc-100 group-hover:text-[#FB7299]">
-                          {v.title}
+                          <EmojiText text={v.title} />
                         </h3>
                         <p className="mt-0.5 text-xs text-zinc-500">{v._count.likes} 赞 · {v._count.comments} 评论</p>
                       </Link>
@@ -543,7 +544,7 @@ export default function ProfilePage() {
                                 <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">{comment.content}</p>
                                 <div className="mt-2 flex items-center gap-4">
                                   <span className="text-xs text-[#FB7299]">
-                                    {comment.video.title.length > 30 ? comment.video.title.slice(0, 30) + "..." : comment.video.title}
+                                    <EmojiText text={comment.video.title} max={30} />
                                   </span>
                                   <span className="text-xs text-zinc-400">{comment._count.likes} 赞 · {comment._count.replies} 回复</span>
                                 </div>
@@ -582,7 +583,7 @@ export default function ProfilePage() {
                             </div>
                             <div className="mt-2 flex items-center gap-4">
                               <span className="text-xs text-[#FB7299]">
-                                {item.comment.video.title.length > 30 ? item.comment.video.title.slice(0, 30) + "..." : item.comment.video.title}
+                                <EmojiText text={item.comment.video.title} max={30} />
                               </span>
                               <span className="text-xs text-zinc-400">{item.comment._count.likes} 赞 · {item.comment._count.replies} 回复</span>
                             </div>
@@ -645,7 +646,7 @@ export default function ProfilePage() {
                           <p className="mt-2 text-sm text-zinc-700 dark:text-zinc-300">{comment.content}</p>
                           <div className="mt-2 flex items-center gap-4">
                             <span className="text-xs text-[#FB7299]">
-                              {comment.video.title.length > 30 ? comment.video.title.slice(0, 30) + "..." : comment.video.title}
+                              <EmojiText text={comment.video.title} max={30} />
                             </span>
                             <span className="text-xs text-zinc-400">{comment._count.likes} 赞 · {comment._count.replies} 回复</span>
                             <button

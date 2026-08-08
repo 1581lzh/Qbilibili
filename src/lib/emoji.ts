@@ -39,7 +39,16 @@ export function insertHtmlAtCursor(
   el.focus();
 
   const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0) return;
+  if (!selection) return;
+
+  // 如果元素已失焦导致选区丢失，回退：把光标放到元素末尾再插入
+  if (selection.rangeCount === 0 || !el.contains(selection.getRangeAt(0).startContainer)) {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(false);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }
 
   const range = selection.getRangeAt(0);
   range.deleteContents();
@@ -66,6 +75,27 @@ export function insertHtmlAtCursor(
 // 获取 contentEditable div 的纯文本内容
 export function getContentEditableText(ref: React.RefObject<HTMLDivElement | null>): string {
   return ref.current?.textContent || "";
+}
+
+// 从 contentEditable div 提取含 emoji 代码（[xxx]）的纯文本：
+// 内联的 emoji 图片（<img> 的 alt / 雪碧图 span 的 data-code）还原为代码文本，其它节点取文本
+export function getContentEditableCodeText(el: HTMLElement | null): string {
+  if (!el) return "";
+  const parts: string[] = [];
+  const walk = (node: Node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      parts.push(node.textContent || "");
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      const tag = (node as HTMLElement).tagName.toLowerCase();
+      const dataset = (node as HTMLElement).dataset;
+      if (tag === "img") parts.push((node as HTMLImageElement).alt || "");
+      else if (dataset && dataset.code) parts.push(dataset.code);
+      else if (tag === "br") parts.push("\n");
+      else (node as HTMLElement).childNodes.forEach(walk);
+    }
+  };
+  el.childNodes.forEach(walk);
+  return parts.join("");
 }
 
 // 清空 contentEditable div

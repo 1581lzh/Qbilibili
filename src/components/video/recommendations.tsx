@@ -6,6 +6,7 @@ import { optimizedCover } from "@/lib/image";
 import { cachedFetch } from "@/lib/fetch-cache";
 import { setAutoPlayVideo } from "@/lib/signals";
 import { avatarColorFor } from "@/lib/avatar";
+import EmojiText from "@/components/ui/emoji-text";
 
 interface Video {
   id: string;
@@ -60,7 +61,7 @@ export default function Recommendations({ currentVideoId }: { currentVideoId: st
           </div>
           <div className="min-w-0 flex-1">
             <h3 className="line-clamp-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">
-              {v.title}
+              <EmojiText text={v.title} />
             </h3>
             <div className="mt-1 flex items-start gap-1.5">
               <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white ${avatarColorFor(v.author.name)}`}>

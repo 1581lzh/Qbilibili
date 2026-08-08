@@ -440,3 +440,11 @@ export const DOUYIN_EMOJI_LIST: DouyinEmojiItem[] = [
   { code: "[纸飞机]", name: "纸飞机", url: "/emoji/douyin/zhifeiji.png" },
   { code: "[粽子]", name: "粽子", url: "/emoji/douyin/zongzi.png" },
 ];
+
+// code -> 列表序号，用于雪碧图定位（与 scripts/gen-douyin-sprite.py 生成的网格顺序一致，
+// 每个 emoji 在 20 列 x 11 行雪碧图中按序号排列）
+export const DOUYIN_EMOJI_SPRITE_INDEX: Record<string, number> = (() => {
+  const map: Record<string, number> = {};
+  DOUYIN_EMOJI_LIST.forEach((e, i) => { map[e.code] = i; });
+  return map;
+})();

@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { optimizedCover } from "@/lib/image";
 import { setAutoPlayVideo } from "@/lib/signals";
 import { avatarColorFor } from "@/lib/avatar";
+import EmojiText from "@/components/ui/emoji-text";
 
 interface Video {
   id: string;
@@ -46,7 +47,7 @@ export default function VideoCard({ video, index = 0 }: { video: Video; index?: 
           </div>
           <div className="min-w-0">
             <h3 className="line-clamp-2 text-sm font-medium leading-snug text-zinc-900 dark:text-zinc-100 group-hover:text-[#FB7299]">
-              {video.title}
+              <EmojiText text={video.title} />
             </h3>
             <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
               {video.author.name} · {video._count.likes} 赞 · {video._count.favorites} 收藏

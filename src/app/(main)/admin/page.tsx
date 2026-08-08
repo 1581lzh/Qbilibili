@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { optimizedCover } from "@/lib/image";
 import { avatarColorFor } from "@/lib/avatar";
+import EmojiText from "@/components/ui/emoji-text";
 
 interface Stats {
   totalUsers: number;
@@ -391,7 +392,7 @@ export default function AdminPage() {
                         <div key={v.id} className="flex items-center gap-4 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-800">
                           <img src={optimizedCover(v.coverUrl, 300)} alt={v.title} width={96} height={64} loading="lazy" decoding="async" className="h-16 w-24 shrink-0 rounded-md object-cover" />
                           <div className="min-w-0 flex-1">
-                            <p className="font-medium text-zinc-900 dark:text-zinc-100">{v.title}</p>
+                            <p className="font-medium text-zinc-900 dark:text-zinc-100"><EmojiText text={v.title} /></p>
                             <p className="text-xs text-zinc-500">UP {v.author.name} · 播放 {v.views} · 点赞 {v._count.likes} · 评论 {v._count.comments} · 收藏 {v._count.favorites}</p>
                           </div>
                           <button onClick={() => setConfirmAction({ type: "video", id: v.id, name: v.title })} className="shrink-0 rounded bg-red-500 px-3 py-1 text-xs text-white hover:bg-red-600">删除</button>

@@ -58,7 +58,7 @@ export default function UploadPage() {
   const [images, setImages] = useState<{ file: File; preview: string; livePhotoVideo: File | null }[]>([]);
   const [selectedCoverIndex, setSelectedCoverIndex] = useState<number | null>(null);
   const [music, setMusic] = useState<{ file: File; preview: string }[]>([]);
-  const [imageDuration, setImageDuration] = useState<number | null>(5);
+  const [imageDuration, setImageDuration] = useState<number | null>(3);
   const [compressDialogOpen, setCompressDialogOpen] = useState(false);
   const [compressTarget, setCompressTarget] = useState<{ file: File; type: "image" | "music" } | null>(null);
   // 图文投稿中选择了超时长视频的提示框

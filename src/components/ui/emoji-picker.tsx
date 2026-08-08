@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo, useCallback } from "react";
 import { DOUYIN_EMOJI_LIST } from "@/lib/douyin-emoji-data";
+import { douyinEmojiSpriteHtml, douyinEmojiSpriteStyle } from "@/lib/douyin-sprite";
 
 // 抖音表情作为第一个分类
 const DOUYIN_CATEGORY = {
@@ -214,8 +215,34 @@ export default function EmojiPicker({ onSelect }: EmojiPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState(0);
   const [search, setSearch] = useState("");
+  const [placement, setPlacement] = useState<"above" | "below">("above");
+  const [panelStyle, setPanelStyle] = useState<{ transform?: string }>({});
   const panelRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+
+  const openPanel = () => {
+    const btn = buttonRef.current;
+    if (!btn) return;
+    const r = btn.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const PANEL_W = 320;
+    const PANEL_H = 330;
+    // 选择空间更大的一侧弹出，避免面板溢出屏幕外无法点击
+    const aboveSpace = r.top - 8;
+    const belowSpace = vh - r.bottom - 8;
+    const showAbove = aboveSpace >= belowSpace;
+    // 水平方向限制在视口内
+    const left = Math.min(Math.max(0, r.left), Math.max(0, vw - PANEL_W - 8));
+    setPlacement(showAbove ? "above" : "below");
+    setPanelStyle(
+      left !== r.left
+        ? { transform: `translateX(${left - r.left}px)` }
+        : {}
+    );
+    setIsOpen(true);
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -229,8 +256,37 @@ export default function EmojiPicker({ onSelect }: EmojiPickerProps) {
         setIsOpen(false);
       }
     };
+    const close = () => setIsOpen(false);
+    // 滚动/窗口大小变化时关闭，避免面板停留在错误位置；
+    // 但面板内部的滚动（滚轮、拖动滚动条）不应关闭面板
+    const handleScroll = (e: Event) => {
+      const t = e.target;
+      if (t instanceof Node && panelRef.current && panelRef.current.contains(t)) return;
+      setIsOpen(false);
+    };
+    // 面板内滚轮：网格可滚动时放行并让网格滚动；不可滚动（边界/空白处）时阻止页面滚动
+    const handleWheel = (e: WheelEvent) => {
+      const t = e.target;
+      if (!(t instanceof Node) || !panelRef.current || !panelRef.current.contains(t)) return;
+      const grid = gridRef.current;
+      if (grid && grid.scrollHeight > grid.clientHeight + 1) {
+        const atTop = grid.scrollTop <= 0;
+        const atBottom = grid.scrollTop + grid.clientHeight >= grid.scrollHeight - 1;
+        if ((e.deltaY < 0 && atTop) || (e.deltaY > 0 && atBottom)) e.preventDefault();
+        return;
+      }
+      e.preventDefault();
+    };
     document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", handleScroll, true);
+    window.addEventListener("wheel", handleWheel, { passive: false });
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", handleScroll, true);
+      window.removeEventListener("wheel", handleWheel);
+    };
   }, [isOpen]);
 
   const filteredCategories = useMemo(() => {
@@ -244,10 +300,10 @@ export default function EmojiPicker({ onSelect }: EmojiPickerProps) {
     })).filter((cat) => cat.emojis.length > 0);
   }, [search]);
 
-  const handleSelect = useCallback((emoji: string, isDouyin: boolean, url?: string) => {
-    if (isDouyin && url) {
-      // 抖音表情：text 存代码，html 存 img 标签
-      onSelect(emoji, `<img src="${url}" alt="${emoji}" class="inline-block h-5 w-5 align-middle mx-0.5" draggable="false" />`);
+  const handleSelect = useCallback((emoji: string, isDouyin: boolean) => {
+    if (isDouyin) {
+      // 抖音表情：text 存代码，html 存雪碧图 span（单张图，不产生额外请求）
+      onSelect(emoji, douyinEmojiSpriteHtml(emoji));
     } else {
       // Unicode emoji：直接插入字符
       onSelect(emoji);
@@ -268,7 +324,8 @@ export default function EmojiPicker({ onSelect }: EmojiPickerProps) {
       <button
         ref={buttonRef}
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => (isOpen ? setIsOpen(false) : openPanel())}
         className="flex h-8 w-8 items-center justify-center rounded-md text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-600 dark:text-zinc-500 dark:hover:bg-zinc-700 dark:hover:text-zinc-300"
         title="插入 emoji"
       >
@@ -283,7 +340,16 @@ export default function EmojiPicker({ onSelect }: EmojiPickerProps) {
       {isOpen && (
         <div
           ref={panelRef}
-          className="absolute bottom-full left-0 z-50 mb-2 w-[320px] overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-800"
+          style={panelStyle}
+          className={`absolute left-0 z-50 w-[320px] overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-800 ${
+            placement === "above" ? "bottom-full mb-2" : "top-full mt-2"
+          }`}
+          onMouseDown={(e) => {
+            // 点击面板不夺走输入框焦点（搜索输入框除外），保证 emoji 能插到光标处
+            const t = e.target as HTMLElement;
+            if (t.closest("input,textarea")) return;
+            e.preventDefault();
+          }}
         >
           {/* 搜索栏 */}
           <div className="border-b border-zinc-100 p-2 dark:border-zinc-700">
@@ -317,7 +383,10 @@ export default function EmojiPicker({ onSelect }: EmojiPickerProps) {
           )}
 
           {/* Emoji 网格 */}
-          <div className="h-[240px] overflow-y-auto p-1.5 [scrollbar-width:thin] [scrollbar-color:rgb(161_161_170)_transparent] dark:[scrollbar-color:rgb(82_82_91)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-zinc-300 [&::-webkit-scrollbar-track]:bg-transparent dark:[&::-webkit-scrollbar-thumb]:bg-zinc-600">
+          <div
+            ref={gridRef}
+            className="h-[240px] overflow-y-auto p-1.5 [scrollbar-width:thin] [scrollbar-color:rgb(161_161_170)_transparent] dark:[scrollbar-color:rgb(82_82_91)_transparent] [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-thumb]:rounded [&::-webkit-scrollbar-thumb]:bg-zinc-300 [&::-webkit-scrollbar-track]:bg-transparent dark:[&::-webkit-scrollbar-thumb]:bg-zinc-600"
+          >
             <div className="grid grid-cols-8 gap-0.5">
               {currentEmojis.map((e, i) => {
                 const isDouyin = "url" in e && !!(e as any).url;
@@ -325,18 +394,18 @@ export default function EmojiPicker({ onSelect }: EmojiPickerProps) {
                   <button
                     key={`${activeCategory}-${i}`}
                     type="button"
-                    onClick={() => handleSelect(e.emoji, isDouyin, isDouyin ? (e as any).url : undefined)}
+                    onClick={() => handleSelect(e.emoji, isDouyin)}
                     className="flex h-8 w-8 items-center justify-center rounded transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-700"
                     title={e.label}
                   >
                     {isDouyin ? (
                       <img
-                        src={(e as any).url}
+                        className="djy-emoji inline-block h-6 w-6"
+                        style={douyinEmojiSpriteStyle(e.emoji)}
+                        src="data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw=="
                         alt={e.label}
-                        className="h-6 w-6"
+                        title={e.label}
                         draggable={false}
-                        loading={i < 64 ? "eager" : "lazy"}
-                        decoding="async"
                       />
                     ) : (
                       <span className="text-lg">{e.emoji}</span>

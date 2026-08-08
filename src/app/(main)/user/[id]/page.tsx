@@ -7,6 +7,7 @@ import Link from "next/link";
 import { optimizedCover } from "@/lib/image";
 import { setAutoPlayVideo } from "@/lib/signals";
 import { avatarColorFor } from "@/lib/avatar";
+import EmojiText from "@/components/ui/emoji-text";
 
 interface UserProfile {
   id: string;
@@ -107,7 +108,7 @@ export default function UserPublicPage({ params }: { params: Promise<{ id: strin
                   />
                 </div>
                 <h3 className="mt-1.5 line-clamp-2 text-sm font-medium text-zinc-900 dark:text-zinc-100 group-hover:text-[#FB7299]">
-                  {v.title}
+                  <EmojiText text={v.title} />
                 </h3>
                 <p className="mt-0.5 text-xs text-zinc-500">{v._count.likes} 赞</p>
               </Link>

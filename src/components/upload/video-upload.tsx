@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import EmojiPicker from "@/components/ui/emoji-picker";
-import { insertTextAtCursor } from "@/lib/emoji";
+import EmojiInput, { type EmojiInputHandle } from "@/components/ui/emoji-input";
 
 interface VideoUploadPageProps {
   title: string;
@@ -38,8 +38,8 @@ export function VideoUploadPage({
   const [thumbPreview, setThumbPreview] = useState("");
   const videoInputRef = useRef<HTMLInputElement>(null);
   const thumbInputRef = useRef<HTMLInputElement>(null);
-  const titleRef = useRef<HTMLInputElement>(null);
-  const descRef = useRef<HTMLTextAreaElement>(null);
+  const titleRef = useRef<EmojiInputHandle>(null);
+  const descRef = useRef<EmojiInputHandle>(null);
 
   useEffect(() => {
     if (file) {
@@ -115,17 +115,16 @@ export function VideoUploadPage({
           <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
             视频标题 *
           </label>
-          <input
+          <EmojiInput
             ref={titleRef}
-            type="text"
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="请输入视频标题"
+            onChange={setTitle}
             maxLength={80}
-            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"
+            placeholder="请输入视频标题"
+            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
           />
           <div className="mt-1 flex items-center justify-between">
-            <EmojiPicker onSelect={(emoji) => insertTextAtCursor(titleRef, emoji)} />
+            <EmojiPicker onSelect={(emoji, html) => titleRef.current?.insert(emoji, html)} />
             <p className="text-xs text-zinc-400">{title.length}/80</p>
           </div>
         </div>
@@ -135,20 +134,17 @@ export function VideoUploadPage({
           <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
             视频简介
           </label>
-          <textarea
+          <EmojiInput
             ref={descRef}
             value={description}
-            onChange={(e) => {
-              const val = e.target.value;
-              if (val.length <= 1000) setDescription(val);
-            }}
-            placeholder="添加视频简介（选填，最多 1000 字）"
-            rows={4}
+            onChange={setDescription}
             maxLength={1000}
-            className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-800"
+            multiline
+            placeholder="添加视频简介（选填，最多 1000 字）"
+            className="min-h-[96px] w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
           />
           <div className="mt-1 flex items-center justify-between">
-            <EmojiPicker onSelect={(emoji) => insertTextAtCursor(descRef, emoji)} />
+            <EmojiPicker onSelect={(emoji, html) => descRef.current?.insert(emoji, html)} />
             <p className="text-xs text-zinc-400">{description.length}/1000</p>
           </div>
         </div>

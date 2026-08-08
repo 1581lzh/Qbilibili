@@ -385,7 +385,14 @@ export default function VideoPlayer({
           cfg.components = [{ name: "PlaylistComponent", type: window.AliPlayerComponent.PlaylistComponent, args: [playlist] }];
         }
 
+        // 用缓存的音量状态（localStorage）初始化播放器，避免播放瞬间先以 100% 音量出声
+        const savedVolumeState = getSavedVolume(userIdRef.current);
+        if (savedVolumeState.volume !== 1) cfg.volume = savedVolumeState.volume;
+
         const player = new window.Aliplayer({ ...cfg, autoplay: shouldAutoPlay }, () => {});
+
+        // 立即应用缓存的音量/静音状态（不等待网络请求），随后再用服务器状态校准
+        applyVolumeToPlayer(player, savedVolumeState);
 
         // 应用共享音量状态（与图文播放器同步），并监听音量变化写回数据库
         ["volumechange", "volumnchanged"].forEach((evt) => player.on(evt, () => syncVolumeFromPlayer(player)));

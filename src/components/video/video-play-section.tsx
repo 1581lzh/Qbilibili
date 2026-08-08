@@ -14,6 +14,7 @@ import { fetchVolume, updateVolume, getSavedVolume } from "@/lib/volume";
 import { toHttps } from "@/lib/image";
 import { isEditableTarget, isComposingEvent } from "@/lib/keyboard";
 import { avatarColorFor } from "@/lib/avatar";
+import EmojiText from "@/components/ui/emoji-text";
 
 interface VideoInfo {
   id: string;
@@ -1630,7 +1631,7 @@ export default function VideoPlaySection({
         </div>
         <div className="mt-3 sm:mt-4">
           <h1 className="text-lg font-bold text-zinc-900 dark:text-zinc-100 sm:text-2xl">
-            {state.video.title}
+            <EmojiText text={state.video.title} />
           </h1>
           <div className="mt-1.5 flex items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400 sm:mt-2 sm:gap-4 sm:text-sm">
             <Link href={`/user/${state.video.author.id}`} className="flex items-center gap-2 hover:opacity-80">

@@ -612,17 +612,17 @@ export function replaceBilibiliEmoji(text: string): string {
   });
 }
 
-// 渲染 emoji 文本：抖音表情用图片，B站格式转 Unicode
+// 渲染 emoji 文本：抖音表情用雪碧图，B站格式转 Unicode
 // 返回 HTML 字符串，用于 dangerouslySetInnerHTML
 export function renderEmojiText(text: string): string {
   // 动态导入避免循环依赖
   const { DOUYIN_EMOJI_MAP } = require("@/lib/douyin-emoji-data") as typeof import("./douyin-emoji-data");
 
   return text.replace(/\[([^\]]+)\]/g, (match) => {
-    // 优先匹配抖音表情（返回 img 标签）
+    // 优先匹配抖音表情（返回雪碧图 span）
     if (DOUYIN_EMOJI_MAP[match]) {
-      const url = DOUYIN_EMOJI_MAP[match];
-      return `<img src="${url}" alt="${match}" class="inline-block h-5 w-5 align-middle mx-0.5" draggable="false" />`;
+      const { douyinEmojiSpriteHtml } = require("@/lib/douyin-sprite") as typeof import("./douyin-sprite");
+      return douyinEmojiSpriteHtml(match);
     }
     // 其次匹配 B站格式 emoji（返回 Unicode）
     if (BILIBILI_EMOJI_MAP[match]) {
