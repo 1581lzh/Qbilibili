@@ -6,7 +6,7 @@
 
 ## 已完成工作
 
-### 本次会话（描述折叠 + 投稿页布局调整）
+### 本次会话（描述折叠 + 投稿页布局调整 + 预览窗口拉伸修复）
 - **内容描述折叠功能（CollapsibleDescription）** — 视频播放页描述（视频/图文类型共用，video-play-section.tsx）
   - 判断规则：内容超过 1.5 行（超过 2 行，或第 2 行内容超过半行宽）时折叠
   - 折叠显示：第一行完整 + 第二行文字按**字符量水平截断**（不是固定 max-height 垂直腰斩），截断点后同一行接上 "···" + "展开" 按钮；展开后全文显示，文本末尾内联"折叠"按钮
@@ -15,6 +15,7 @@
   - 细节：前缀末尾 `\n` 去除后再拼接后缀（避免残留换行多占空行把截断点压回第一行）；截断点落在符号（\p{P}\p{S}）上向前推移一个字符；窗口 resize 重新测量；切视频按 `key={videoId}` 重置折叠状态
 - **视频投稿页字段顺序调整** — 右侧表单顺序由「视频文件→标题→简介→封面图」调整为「标题→简介→视频文件→封面图」，与图文投稿一致（video-upload.tsx）
 - **投稿页预览窗口与表单等高对齐** — 视频/图文投稿左侧预览窗口高度与右侧表单列对齐：外层去掉 `lg:items-end` 动态条件（恢复默认 stretch 等高），左侧 sticky 容器 `lg:h-full`，预览框 `lg:aspect-auto lg:flex-1` 填满剩余高度（移动端仍保持 aspect-[3/4]）；封面预览块保持预览框下方（video-upload.tsx / image-text-upload.tsx）
+- **投稿页预览窗口拉伸修复（对等高对齐的补充修复）** — 上传素材（视频/封面/图片/音乐）导致右栏内容变高时，预览窗因 `lg:flex-1` + sticky 容器 `lg:h-full` 被拉长变形；方案：两个组件新增 `hasMaterial` 判断（视频页 `= !!file || !!thumbnail`，图文页 `= images.length > 0 || music.length > 0`）对预览类做条件渲染——无素材（默认）保持 `lg:aspect-auto lg:flex-1 lg:min-h-0` 与表单等高；有素材切换 `lg:flex-none` 恢复 `aspect-[3/4]` 固定比例不再参与 flex 拉伸，作为左栏 flex-col 首项天然与右栏顶部对齐，sticky 吸顶保留（video-upload.tsx / image-text-upload.tsx）；本次未 touch 部署文件，使用 `sudo systemctl restart bilibili` 重启生产服务并已生效
 
 ### 本次会话（评论图片预览 PC 5 列 + 灯箱鼠标双击缩放）
 - **评论图片预览网格 PC 端 5 列** — comment-images.tsx 移动端保持 3 列，PC（sm+ 断点）改为 5 列（`sm:max-w-[750px] sm:grid-cols-5 sm:gap-1.5`）；溢出小标移动端第 3 格、PC 端第 5 格显示 `+N`（黑底白字，`+溢出数`）；可见性规则升级：`i >= 5` 全部隐藏、`i >= 3` 移动端隐藏 PC（sm:block）显示，改用变量 `PC_MAX_VISIBLE = 5`

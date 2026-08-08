@@ -59,12 +59,19 @@ export function VideoUploadPage({
     setThumbPreview("");
   }, [thumbnail]);
 
+  // 上传素材后右半边被拉长，左侧预览保持固定比例并顶部对齐，不再跟随拉伸
+  const hasMaterial = !!file || !!thumbnail;
+
   return (
     <div className="flex flex-col gap-6 lg:flex-row">
       {/* Left: Video preview */}
       <div className="w-full lg:w-2/5">
         <div className="flex flex-col gap-3 lg:sticky lg:top-4 lg:h-full">
-          <div className="relative aspect-[3/4] overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-800 lg:aspect-auto lg:flex-1 lg:min-h-0">
+          <div
+            className={`relative aspect-[3/4] overflow-hidden rounded-lg bg-zinc-100 dark:bg-zinc-800 ${
+              hasMaterial ? "lg:flex-none" : "lg:aspect-auto lg:flex-1 lg:min-h-0"
+            }`}
+          >
             <AnimatePresence mode="wait">
               {videoPreview ? (
                 <motion.video

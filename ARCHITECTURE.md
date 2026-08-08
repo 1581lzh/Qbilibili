@@ -102,8 +102,8 @@ H:\bilibili/
 │   │   ├── providers.tsx      # 全局 Provider（AuthModal 通过 next/dynamic 懒加载）
 │   │   ├── theme-provider.tsx # 深色模式 Provider（light/dark/system + 圆形遮罩扩散动画（背景层圆+圆中圆+文字单独渐变））
 │   │   ├── upload/            # 投稿相关组件
-│   │   │   ├── video-upload.tsx        # 视频投稿组件（左右布局：视频预览+表单，预览窗口与右侧表单等高对齐；表单顺序：标题→简介→视频文件→封面图）
-│   │   │   ├── image-text-upload.tsx   # 图文投稿组件（左右布局：大预览+瀑布流缩略图+编辑模式；预览窗口与右侧表单等高对齐）
+│   │   │   ├── video-upload.tsx        # 视频投稿组件（左右布局：视频预览+表单，预览窗口与右侧表单等高对齐；上传素材后预览切换固定 3:4 比例顶部对齐不随右栏拉伸；表单顺序：标题→简介→视频文件→封面图）
+│   │   │   ├── image-text-upload.tsx   # 图文投稿组件（左右布局：大预览+瀑布流缩略图+编辑模式；预览窗口与右侧表单等高对齐；上传素材后预览切换固定 3:4 比例顶部对齐不随右栏拉伸）
 │   │   │   └── music-player.tsx        # 音乐播放器组件
 │   │   └── video/             # 视频相关组件
 │   │       ├── video-card.tsx             # 视频卡片（同名同色头像）
