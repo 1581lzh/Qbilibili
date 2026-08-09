@@ -12,7 +12,7 @@ const IMAGE_MAX_SIZE = 15 * 1024 * 1024;
 const MUSIC_MAX_SIZE = 50 * 1024 * 1024;
 const ALLOWED_VIDEO_EXTENSIONS = ["mp4", "webm", "mov", "avi", "flv", "mkv"];
 const ALLOWED_IMAGE_EXTENSIONS = ["jpg", "jpeg", "png", "gif", "webp", "bmp"];
-const ALLOWED_MUSIC_EXTENSIONS = ["mp3", "wav", "ogg", "aac", "flac"];
+const ALLOWED_MUSIC_EXTENSIONS = ["mp3", "wav", "ogg", "aac", "flac", "m4a"];
 
 export async function POST(request: NextRequest) {
   const originError = requireValidOrigin(request);
@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
       } as any);
     } else {
       const buffer = Buffer.from(await file.arrayBuffer());
-      await oss.put(filename, buffer);
+      await oss.put(filename, buffer, { mime: file.type || "application/octet-stream" } as any);
     }
 
     const url = oss.generateObjectUrl(filename);
