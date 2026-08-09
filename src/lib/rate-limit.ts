@@ -35,7 +35,7 @@ export const RATE_LIMITS = {
   login: { windowMs: 15 * 60 * 1000, maxRequests: 5 },
   register: { windowMs: 60 * 60 * 1000, maxRequests: 5 },
   comment: { windowMs: 60 * 1000, maxRequests: 10 },
-  upload: { windowMs: 8 * 60 * 1000, maxRequests: 50 },
+  upload: { windowMs: 30 * 60 * 1000, maxRequests: 300 },
   api: { windowMs: 60 * 1000, maxRequests: 60 },
 } as const;
 

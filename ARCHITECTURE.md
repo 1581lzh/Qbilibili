@@ -364,7 +364,7 @@ VOD_SPACE_NAME=your-space-name
 - 使用内存速率限制器（`src/lib/rate-limit.ts`）
 - 注册：5 次/IP，窗口 1 小时
 - 评论：10 次/用户，窗口 1 分钟
-- 上传：5 次/用户，窗口 8 分钟
+- 上传：300 次/用户，窗口 30 分钟
 
 ### 会话安全
 - JWT Token 有效期：7 天（`session.maxAge` 和 `jwt.maxAge`）

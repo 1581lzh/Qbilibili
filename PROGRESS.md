@@ -6,6 +6,9 @@
 
 ## 已完成工作
 
+### 本次会话（上传限流放宽）
+- **上传限流放宽** — 图文投稿每张图片、每个实况视频、每首背景音乐各计一次 `/api/upload` 请求（最多 40 张图），原 8 分钟 50 次/用户的额度极易耗尽，导致 429"上传过于频繁"、前端报"文件上传失败"；修复为 `src/lib/rate-limit.ts` 上传限流放宽至 30 分钟 300 次/用户，`ARCHITECTURE.md` 速率限制部分同步更新
+
 ### 本次会话（Emoji 显示统一组件 + 雪碧图 + 播放器音量恢复）
 - **Emoji 显示统一组件** — 新增 `src/components/ui/emoji-text.tsx`（EmojiText 组件）与 `src/lib/emoji-data.ts` 的 `renderEmojiText()`：标题/简介/搜索等所有纯文本展示位置统一把 `[微笑]` 这类 emoji 代码渲染为图形（Unicode 直接显示、抖音表情渲染雪碧图），保证输入后标题与正文里的 emoji 立即正确显示
 - **EmojiInput contentEditable 输入组件** — 新增 `src/components/ui/emoji-input.tsx`：稿件标题/简介、编辑页使用 contentEditable 容器，插入的 emoji 实时显示图形，提交/提取时通过 `getContentEditableCodeText()` 还原为 `[code]` 文本存储；支持 maxLength 截断（不截断代码中间）、粘贴、IME 防抖
