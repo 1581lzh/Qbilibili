@@ -85,7 +85,7 @@ function LivePhotoPreview({ video, poster, className }: { video: File; poster: s
 
   // 封面帧作为相对定位元素撑起容器高度；视频与按钮绝对定位覆盖其上
   return (
-    <div className="relative">
+    <div className="relative h-full w-full">
       <img
         src={poster}
         alt="实况封面"
@@ -161,7 +161,7 @@ export function ImageTextUploadPage({
   const MAX_IMAGES = 40;
   const MAX_AUDIO = 3;
   // 图文投稿允许的实况视频最大时长（秒），超过则建议前往视频投稿
-  const MAX_LIVE_VIDEO_SECONDS = 4;
+  const MAX_LIVE_VIDEO_SECONDS = 20;
 
   // 注意：不在此处 revoke preview URL。
   // preview URL 由父组件（upload/page.tsx）持有，切换「视频投稿/图文投稿」标签会导致本组件卸载重挂，
@@ -185,7 +185,7 @@ export function ImageTextUploadPage({
     const livePhotoLib = await import("@/lib/live-photo");
 
     // 检测并处理选中视频文件（无同名图片配对时视为「实况视频」）：
-    // 视频作为实况预览，需在 4 秒以内，超出时长则提醒用户前往视频投稿。
+    // 视频作为实况预览，需在 20 秒以内，超出时长则提醒用户前往视频投稿。
     const videoFiles = filesToProcess.filter((f) => f.type.startsWith("video/"));
     if (videoFiles.length > 0) {
       // 有图片配对（如 Apple HEIC+MOV）时交给 processImageFiles 处理
@@ -673,7 +673,7 @@ export function ImageTextUploadPage({
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
             </svg>
             点击或拖拽上传图片
-            <p className="mt-1 text-xs text-zinc-400">支持 JPG、PNG、GIF、WebP、HEIC、实况照片（.livp / Motion Photo），单张最大 15MB；也可上传 ≤4 秒的短视频作为实况</p>
+            <p className="mt-1 text-xs text-zinc-400">支持 JPG、PNG、GIF、WebP、HEIC、实况照片（.livp / Motion Photo），单张最大 15MB；也可上传 ≤20 秒的短视频作为实况</p>
           </button>
         </div>
 

@@ -591,7 +591,7 @@ export default function UploadPage() {
         title="视频时长超出图文投稿限制"
         message={
           videoTooLongDialog
-            ? `「${videoTooLongDialog.file.name}」时长约 ${videoTooLongDialog.durationSeconds} 秒。图文投稿中的实况视频最长 4 秒，较长视频请前往视频投稿。`
+            ? `「${videoTooLongDialog.file.name}」时长约 ${videoTooLongDialog.durationSeconds} 秒。图文投稿中的实况视频最长 20 秒，较长视频请前往视频投稿。`
             : ""
         }
         confirmText="前往视频投稿"

@@ -6,13 +6,26 @@
 
 ## 已完成工作
 
-### 本次会话（上传 400 错误透传 + 非常规图片格式转 JPEG）
-- **根因** — `/api/upload` 校验失败（超 15MB、扩展名不在白名单等）返回 400 时，前端三处上传逻辑都丢弃响应体细节统一报「文件上传失败」，用户无法知道真实原因
-- **修复** — 前端三处透出后端 error 详情：图文投稿 `uploadFileToOss`（upload/page.tsx）、编辑页封面上传（edit/[videoId]/page.tsx）、评论图片上传（comment-section.tsx），报错变为「文件上传失败：{后端错误详情}」；后端 `/api/upload` 的 400/429 分支增加 `console.warn` 日志（带用户名/文件名/大小/MIME/type 参数）便于排障
-- **兼容** — 新增 `src/lib/image-compress.ts` 导出 `convertToJpeg(file)`：浏览器可解码但后端白名单（jpg/jpeg/png/gif/webp/bmp）缺失的格式（.avif/.heif/.tiff 等）选择时强制转 JPEG（缩放到 2560 内、quality 0.92）；图文投稿页普通图片分支应用，解码失败提示「无法读取该图片，已跳过」
+### 本次会话（图文实况视频时长上限放宽至 20 秒 + 实况预览居中修复）
+- **`实况时长上限`** — 图文投稿实况视频最大时长从 4 秒放宽至 20 秒：`src/components/upload/image-text-upload.tsx` `MAX_LIVE_VIDEO_SECONDS` 4 → 20，覆盖三条校验路径（纯视频文件、.livp/HEIC 配对视频、独立实况视频）；上传提示文案同步改为「≤20 秒的短视频作为实况」，超时弹窗文案改为「图文投稿中的实况视频最长 20 秒，较长视频请前往视频投稿」；播放端无需改动（实况图本就按视频完整时长分配轮播时间）
+- **`实况预览居中修复`** — 图文投稿左侧大预览中实况预览不居中：`LivePhotoPreview` 根容器原只有 `relative` 无高度，内部封面 `<img>` 的 `h-full w-full object-contain` 高度解析失效（按原始尺寸渲染、不在容器内居中）；根容器补 `h-full w-full` 后与普通图片一致等比缩放居中显示
 
-### 本次会话（上传限流放宽）
-- **上传限流放宽** — 图文投稿每张图片、每个实况视频、每首背景音乐各计一次 `/api/upload` 请求（最多 40 张图），原 8 分钟 50 次/用户的额度极易耗尽，导致 429"上传过于频繁"、前端报"文件上传失败"；修复为 `src/lib/rate-limit.ts` 上传限流放宽至 30 分钟 300 次/用户，`ARCHITECTURE.md` 速率限制部分同步更新
+### 本次会话（背景音乐支持 .m4a + 小文件上传 Content-Type 修复）
+- **`格式支持`** — 音乐白名单新增 `.m4a`（Apple 音频格式，AAC 编码，所有主流浏览器可播）：`src/app/api/upload/route.ts` `ALLOWED_MUSIC_EXTENSIONS`
+- **`Content-Type 修复`** — 小文件（≤5MB，含音乐场景）走 `oss.put(filename, buffer)` 时未传 mime，OSS 以 `application/octet-stream` 存储导致播放器无法按音频解码；补传 `file.type`（`{ mime: file.type || "application/octet-stream" }`），大文件流式分支原本已带
+### 本次会话（上传 400 错误详情透出 + 非白名单图片格式转 JPEG）
+- **`根因`** — /api/upload 校验失败（超过 15MB / 扩展名不在白名单等）返回 400，前端三处上传逻辑（图文投稿 uploadFileToOss、编辑页封面、评论图片）都丢弃响应体细节统一报「文件上传失败」，用户无法得知真实原因（此前 429 为另一独立问题已修复）
+- **`错误透出`** — 三处上传失败时解析响应体 `error` 字段并展示（如「文件上传失败：不支持的文件格式：.heic」），定位问题无需再翻代码
+- **`上传日志`** — route.ts 的 400（缺文件/类型不支持/超限/扩展名不支持）与 429 分支增加 `console.warn`（用户名/文件名/大小/MIME/type），生产排障直接看 journalctl
+- **`格式兜底`** — `src/lib/image-compress.ts` 新增 `convertToJpeg()`：浏览器可解码但后端白名单缺失的格式（.avif/.heif/.tiff 等）强制转 JPEG（缩放到 2560 内、quality 0.92），图文投稿选择此类图片时自动转换再加入；canvas 解码失败则提示跳过该图片，不再把不支持的文件原样上传
+- **`踩坑`** — 日志构造字符串时 file 可能为 null，需可选链（`file?.name`）否则 TypeScript 类型检查失败；提交前必须 `npm run build` 全量验证
+
+### 本次会话（上传限流放宽，修复图文投稿 429 上传失败）
+- **`限流放宽`** — 上传接口限流从 50 次/8 分钟/用户放宽为 300 次/30 分钟/用户（`src/lib/rate-limit.ts` `RATE_LIMITS.upload`）
+- **`背景`** — 图文投稿每张图片、每个实况视频、每首音乐各发一次 POST /api/upload 请求（最多 40 张图 + 封面 + 音乐），旧限流"8 分钟 50 次"极易耗尽，之后所有上传返回 429「上传过于频繁」
+- **`前端表现`** — 前端 `uploadFileToOss` 对非 2xx 响应统一报「文件上传失败」（src/app/(main)/upload/page.tsx:232），额度耗尽时表现为上传全部失败
+- **`计数时机`** — 限流计数在文件校验前累加（src/app/api/upload/route.ts:26），失败的请求也消耗额度，重试期间额度只会继续消耗
+- **`文档同步`** — ARCHITECTURE.md 速率限制小节同步修正为「上传：300 次/用户，窗口 30 分钟」
 
 ### 本次会话（Emoji 显示统一组件 + 雪碧图 + 播放器音量恢复）
 - **Emoji 显示统一组件** — 新增 `src/components/ui/emoji-text.tsx`（EmojiText 组件）与 `src/lib/emoji-data.ts` 的 `renderEmojiText()`：标题/简介/搜索等所有纯文本展示位置统一把 `[微笑]` 这类 emoji 代码渲染为图形（Unicode 直接显示、抖音表情渲染雪碧图），保证输入后标题与正文里的 emoji 立即正确显示

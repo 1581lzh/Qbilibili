@@ -604,6 +604,7 @@ sudo firewall-cmd --reload
   - **暂停保留进度原地暂停** — 实况播放中暂停不再跳回封面：阶段机暂停分支 `video.pause()` 原地冻结画面与进度，恢复时从当前位置续播（恰好在播完淡出时刻暂停则重新淡入从头播）；独立播放 effect 加 `isPlaying` 守卫，元数据/进度监听拆独立 effect 驱动
   - **时长分配**：自动模式下静态图时长 = `(总音频时长 - 实况视频总时长) / 静态图数`，实况图 = 视频完整时长，避免有的长有的短
   - **封面**：实况只能用静态帧（图片本身）做封面，不提供动图封面
+  - **上传时长上限**：图文投稿实况视频最长 20 秒（超出提示前往视频投稿），常量 `MAX_LIVE_VIDEO_SECONDS`；大预览/缩略图提供实况播放预览（`LivePhotoPreview` 根容器 `relative h-full w-full`，封面/视频等比缩放居中显示，点击播放、播完自动暂停）
   - **编辑**：编辑页图片排序/删除时 livePhotoVideos 同步，保存时一并提交
 39. **Emoji 显示统一组件** — 新增 `src/components/ui/emoji-text.tsx`（EmojiText 组件）与 `src/lib/emoji-data.ts` 的 `renderEmojiText()`：标题/简介/搜索等所有纯文本展示位置统一把 `[微笑]` 这类 emoji 代码渲染为图形（Unicode 直接显示、抖音表情渲染雪碧图），保证输入后标题与正文里的 emoji 立即正确显示
 40. **EmojiInput contentEditable 输入组件** — 新增 `src/components/ui/emoji-input.tsx`：稿件标题/简介、编辑页使用 contentEditable 容器，插入的 emoji 实时显示图形，提交/提取时通过 `getContentEditableCodeText()` 还原为 `[code]` 文本存储；支持 maxLength 截断（不截断代码中间）、粘贴、IME 防抖
