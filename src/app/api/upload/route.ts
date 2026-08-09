@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     const file = formData.get("file") as File | null;
     const type = formData.get("type") as string;
 
-    const info = `user=${session.user.id} name=${file.name} size=${file.size} mime=${file.type} type=${type}`;
+    const info = `user=${session.user.id} name=${file?.name ?? "-"} size=${file?.size ?? 0} mime=${file?.type ?? "-"} type=${type}`;
 
     if (!file) {
       console.warn(`[upload] missing file: ${info}`);

@@ -238,7 +238,6 @@ export function ImageTextUploadPage({
     }
 
     // 剩余文件：图片作为静态图加入；未配对的视频校验时长后作为实况照片加入
-    // 剩余文件：图片作为静态图加入；未配对的视频校验时长后作为实况参加如
     for (const file of filesToProcess) {
       if (file.type.startsWith("video/")) {
         // 视频走独立实况路径（提取封面帧 + 校验时长）
