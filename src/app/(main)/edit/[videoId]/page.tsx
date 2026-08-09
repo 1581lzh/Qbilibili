@@ -110,7 +110,14 @@ export default function EditVideoPage() {
     const formData = new FormData();
     formData.append("file", file);
     const res = await fetch("/api/upload", { method: "POST", body: formData });
-    if (!res.ok) throw new Error("封面上传失败");
+    if (!res.ok) {
+      let msg = "封面上传失败";
+      try {
+        const data = await res.json();
+        if (data?.error) msg = `封面上传失败：${data.error}`;
+      } catch {}
+      throw new Error(msg);
+    }
     const data = await res.json();
     return data.url;
   };

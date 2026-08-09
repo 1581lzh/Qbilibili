@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { CompressDialog } from "@/components/ui/compress-dialog";
-import { compressImage, needsCompression, formatFileSize } from "@/lib/image-compress";
+import { compressImage, needsCompression, formatFileSize, convertToJpeg } from "@/lib/image-compress";
 import { MusicPlayer } from "@/components/upload/music-player";
 import EmojiPicker from "@/components/ui/emoji-picker";
 import EmojiInput, { type EmojiInputHandle } from "@/components/ui/emoji-input";
@@ -238,6 +238,7 @@ export function ImageTextUploadPage({
     }
 
     // 剩余文件：图片作为静态图加入；未配对的视频校验时长后作为实况照片加入
+    // 剩余文件：图片作为静态图加入；未配对的视频校验时长后作为实况参加如
     for (const file of filesToProcess) {
       if (file.type.startsWith("video/")) {
         // 视频走独立实况路径（提取封面帧 + 校验时长）
@@ -247,6 +248,18 @@ export function ImageTextUploadPage({
           continue;
         }
         await addLivePhotoVideo(file, livePhotoLib);
+        continue;
+      }
+      const ext = (file.name.split(".").pop() || "").toLowerCase();
+      const backendSupported = ["jpg", "jpeg", "png", "gif", "webp", "bmp"].includes(ext);
+      if (!backendSupported) {
+        // avif/heif/tiff 等后端不支持格式：强制转 JPEG（解码失败则提示跳过）
+        try {
+          const blob = await convertToJpeg(file);
+          addImage(new File([blob], file.name.replace(/\.[^.]+$/, "") + ".jpg", { type: "image/jpeg" }));
+        } catch {
+          alert(`无法读取该图片（${file.name}），已跳过`);
+        }
         continue;
       }
       if (needsCompression(file)) {

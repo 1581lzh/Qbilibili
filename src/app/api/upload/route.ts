@@ -25,6 +25,7 @@ export async function POST(request: NextRequest) {
 
   const rateLimit = checkRateLimit(`upload:${session.user.id}`, RATE_LIMITS.upload);
   if (!rateLimit.allowed) {
+    console.warn(`[upload] rate limited: user=${session.user.id} remaining=0 resetIn=${rateLimit.resetIn}ms`);
     return NextResponse.json(
       { error: "上传过于频繁，请稍后再试" },
       { status: 429 }
@@ -36,7 +37,10 @@ export async function POST(request: NextRequest) {
     const file = formData.get("file") as File | null;
     const type = formData.get("type") as string;
 
+    const info = `user=${session.user.id} name=${file.name} size=${file.size} mime=${file.type} type=${type}`;
+
     if (!file) {
+      console.warn(`[upload] missing file: ${info}`);
       return NextResponse.json({ error: "请选择文件" }, { status: 400 });
     }
 
@@ -46,6 +50,7 @@ export async function POST(request: NextRequest) {
     const isMusic = type === "music" || file.type.startsWith("audio/");
 
     if (!isVideo && !isCover && !isImage && !isMusic) {
+      console.warn(`[upload] unsupported type: ${info}`);
       return NextResponse.json({ error: "不支持的文件类型" }, { status: 400 });
     }
 
@@ -69,6 +74,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (file.size > maxSize) {
+      console.warn(`[upload] too large: ${info} max=${maxLabel}`);
       return NextResponse.json(
         { error: `文件大小超过限制（最大 ${maxLabel}）` },
         { status: 400 }
@@ -76,6 +82,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!allowedExtensions.includes(ext)) {
+      console.warn(`[upload] bad extension: ${info}`);
       return NextResponse.json(
         { error: `不支持的文件格式：.${ext}` },
         { status: 400 }

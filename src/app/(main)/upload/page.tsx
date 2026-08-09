@@ -229,7 +229,12 @@ export default function UploadPage() {
           const data = JSON.parse(xhr.responseText);
           resolve(data.url);
         } else {
-          reject(new Error("文件上传失败"));
+          let msg = "文件上传失败";
+          try {
+            const data = JSON.parse(xhr.responseText);
+            if (data?.error) msg = `文件上传失败：${data.error}`;
+          } catch {}
+          reject(new Error(msg));
         }
       };
       xhr.onerror = () => reject(new Error("网络错误"));

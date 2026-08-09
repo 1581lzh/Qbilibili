@@ -6,6 +6,11 @@
 
 ## 已完成工作
 
+### 本次会话（上传 400 错误透传 + 非常规图片格式转 JPEG）
+- **根因** — `/api/upload` 校验失败（超 15MB、扩展名不在白名单等）返回 400 时，前端三处上传逻辑都丢弃响应体细节统一报「文件上传失败」，用户无法知道真实原因
+- **修复** — 前端三处透出后端 error 详情：图文投稿 `uploadFileToOss`（upload/page.tsx）、编辑页封面上传（edit/[videoId]/page.tsx）、评论图片上传（comment-section.tsx），报错变为「文件上传失败：{后端错误详情}」；后端 `/api/upload` 的 400/429 分支增加 `console.warn` 日志（带用户名/文件名/大小/MIME/type 参数）便于排障
+- **兼容** — 新增 `src/lib/image-compress.ts` 导出 `convertToJpeg(file)`：浏览器可解码但后端白名单（jpg/jpeg/png/gif/webp/bmp）缺失的格式（.avif/.heif/.tiff 等）选择时强制转 JPEG（缩放到 2560 内、quality 0.92）；图文投稿页普通图片分支应用，解码失败提示「无法读取该图片，已跳过」
+
 ### 本次会话（上传限流放宽）
 - **上传限流放宽** — 图文投稿每张图片、每个实况视频、每首背景音乐各计一次 `/api/upload` 请求（最多 40 张图），原 8 分钟 50 次/用户的额度极易耗尽，导致 429"上传过于频繁"、前端报"文件上传失败"；修复为 `src/lib/rate-limit.ts` 上传限流放宽至 30 分钟 300 次/用户，`ARCHITECTURE.md` 速率限制部分同步更新
 

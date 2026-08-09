@@ -125,7 +125,14 @@ export default function CommentSection({ videoId }: { videoId: string }) {
       formData.append("file", file);
       formData.append("type", "image");
       const res = await fetch("/api/upload", { method: "POST", body: formData });
-      if (!res.ok) throw new Error("图片上传失败");
+      if (!res.ok) {
+        let msg = "图片上传失败";
+        try {
+          const data = await res.json();
+          if (data?.error) msg = `图片上传失败：${data.error}`;
+        } catch {}
+        throw new Error(msg);
+      }
       const { url } = await res.json();
       urls.push(url);
     }
