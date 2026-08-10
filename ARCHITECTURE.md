@@ -110,7 +110,7 @@ H:\bilibili/
 │   │   └── video/             # 视频相关组件
 │   │       ├── video-card.tsx             # 视频卡片（同名同色头像）
 │   │       ├── video-player.tsx           # 视频播放器（Aliplayer + 空格暂停 + 方向键/A-D 快退快进 5 秒）
-│   │       ├── video-play-section.tsx     # 播放区域（含图片轮播组件：相册式左右平移轨道（鼠标/触摸拖动+循环）、预加载窗口（前后2张图片+实况视频数据）、播放模式切换（循环/单次/自动连播）、底部图片进度条（始终显示，控制栏 0fr↔1fr 水托荷叶动画）、音量控制、中心蒙版动画、PC单击+移动端双击暂停；CollapsibleDescription 描述折叠组件（超 1.5 行折叠：第一行完整+第二行按字符量截断（非垂直腰斩），截断点后同一行接"···"+"展开"按钮，展开后末尾内联"折叠"按钮，Range.getClientRects 行像素测量+二分预留后缀宽度，符号前移截断，resize 重测，切视频按 key 重置））
+│   │       ├── video-play-section.tsx     # 播放区域（含图片轮播组件：相册式左右平移轨道（鼠标/触摸拖动+循环）、预加载窗口（前后2张图片+实况视频数据）、播放模式切换（循环/单次/自动连播）、底部图片进度条（始终显示，控制栏 0fr↔1fr 水托荷叶动画）、音量控制、中心蒙版动画、PC单击+移动端双击暂停；缩放 0.5-5 倍（滚轮/双击/捏合/按钮/键盘，scale>1 拖动=平移）+ 缩放中暂停自动轮播；移动端系统返回键重置缩放（popstate+pushState 标记）；全屏返回降级/进出复位轨道状态；横屏播放器高度自适应（max-height calc(max(240px,100dvh-5.5rem))）；滑动切换阈值 1/5 页宽；全屏进度条左右收窄 clamp(16px,6vw,48px)；手动切实况图不置 userInteracted 立即播放；实况 canvas 绘制像素总预算 400 万；CollapsibleDescription 描述折叠组件（超 1.5 行折叠：第一行完整+第二行按字符量截断（非垂直腰斩），截断点后同一行接"···"+"展开"按钮，展开后末尾内联"折叠"按钮，Range.getClientRects 行像素测量+二分预留后缀宽度，符号前移截断，resize 重测，切视频按 key 重置））
 │   │       ├── video-like-button.tsx      # 点赞按钮（乐观更新，即时响应）
 │   │       ├── video-favorite-button.tsx  # 收藏按钮（乐观更新，即时响应）
 │   │       ├── video-delete-button.tsx    # 删除视频按钮
@@ -423,8 +423,11 @@ npm run dev
 ### 生产环境
 1. **构建项目**
    ```bash
+   sudo systemctl stop bilibili.service   # 停止服务释放内存（服务器内存 3.6G）
    npm run build
+   sudo systemctl start bilibili.service  # 构建完成后重启服务
    ```
+   > 服务已注册为 systemd 服务（`bilibili.service`，端口 3005），构建需占用大量内存，必须**先停服再构建**，否则与运行中的 Node 进程争抢内存导致构建 Swap 卡死。
    > `package.json` 中 build 脚本已配置 `NODE_OPTIONS="--max-old-space-size=1536"`，限制 Node.js 最大内存 1.5GB，防止小内存机器（≤4GB）构建时 Swap 卡死。如遇构建卡死，可临时添加 `TURBOPACK=0` 禁用 Turbopack。
 
 2. **上传文件到服务器**
@@ -807,13 +810,29 @@ sudo firewall-cmd --reload
 
 ### 图文相册式左右平移（ImageCarousel）
 - **横向轨道布局**：当前页 + 前后相邻页（循环）三页 `flex` 并排，轨道 `translateX(calc(-100% + dragX))`；切换只更新 `currentIndex` 并复位轨道（内容已换，视觉无缝），三页常驻消除挂载/卸载闪烁
-- **拖拽**：Pointer 事件统一处理鼠标左键与触摸，`dragX` 实时跟手；松手 `settleDrag` 超过 1/4 页宽滑入相邻页（`nextIndexRef`/`prevIndexRef` 循环），否则回弹；无位移的点击仍触发播放/暂停（触摸双击/单击逻辑保留）
+- **拖拽**：Pointer 事件统一处理鼠标左键与触摸，`dragX` 实时跟手；松手 `settleDrag` 超过 1/5 页宽（`W * 0.2`，原 1/4 页宽，移动端滑动更灵敏）滑入相邻页（`nextIndexRef`/`prevIndexRef` 循环），否则回弹；无位移的点击仍触发播放/暂停（触摸双击/单击逻辑保留）
 - **预加载窗口**：`PREFETCH_RANGE=2`，预览当前图时用 `new Image()` 预加载前后各 2 张图片（主图与模糊背景同 URL 一次就绪）；实况视频用隐藏 `<video preload="auto" muted>` 仅缓冲数据不播放（非预览状态仍显示封面），切到实况时立即就绪
 - **每页独立模糊背景**：模糊 `<img>` 与清晰主图在同一页面容器内一起平移，`overflow-hidden` 裁剪 `scale-110 + blur-60px` 扩散避免串色
 - **手动/自动分离**：`slideBy(dir, manual)` —— 自动轮播传 `false`（不暂停、进度从 0 续播），按键/拖拽/按钮/进度条传 `true`（暂停并满进度显示），修复自动轮播被误判为手动切换导致进度条瞬间满的问题
 - **控制栏水托荷叶**：进度条独立常驻屏幕底部；控制栏用 grid 行高 `0fr↔1fr` 过渡（`transition-[grid-template-rows]`）实现从底部升起/落下，`overflow-hidden` 内层折叠
 - **控件弹层不裁切**：音量条/模式提示弹层移出 `overflow-hidden` 裁切层，作为控制栏兄弟节点渲染；`useLayoutEffect` 测量按钮相对播放器容器的位置（`getBoundingClientRect` 差值）做绝对定位，弹层显示/容器尺寸变化时自动重算，全屏/缩放不错位
 - **三页轨道 key 唯一性（2 张图边界修复）**：轨道列表 `[prevIdx, currentIndex, nextIdx].map()` 的 `key` 须用**槽位 slot（0/1/2）**而非图片序号 —— 当只有 2 张图时 `prevIdx === nextIdx`，若以图片序号做 key（`key={page-${idx}}`）会因 `page-1`/`page-0` 重复导致 React DOM 复用错乱：计数器跳对但主图不更新（仍显示上一张）、相邻页元素意外残留（DOM 出现第 4 页）。表现为「切换后图片显示一致」「02 该暗却亮」（实际一直显示亮的 01）。改用 `key={page-slot-${slot}}` 后三槽恒唯一，DOM 结构稳定，React 仅更新各槽位 `src`，2 张图切换恢复正常
+
+### 图文播放器缩放与移动端/全屏适配（ImageCarousel）
+- **中心缩放状态机** — 纯前端中心缩放（缩放中心为容器中心，不跟随鼠标指针），范围 0.5-5 倍：
+  - `scale`/`position` 与 `scaleRef`/`posRef` 统一走 `setScaleSync` 同步（pinch/wheel 高频触发中 React 渲染异步，交互判定永远读最新值，同评论灯箱思路）；拖动/捏合中禁用过渡动画保证跟手
+  - 模式判定：`zoomed = Math.abs(scale - 1) > 0.05`。scale≈1 视为相册正常模式（拖动=切页）；否则为缩放模式（拖动=平移图片）；回到 100% 时位移归零居中恢复相册拖动
+  - 缩放期间暂停自动轮播（放大查看的图不被切走），退出缩放继续；切页/进度条跳转/自动推进前 `resetZoom()` 归位，避免新页面带旧缩放闪烁一帧
+  - 交互入口：鼠标滚轮缩放、鼠标双击缩放（单击经 350ms 延迟判双击后再触发播放/暂停，防闪烁）、触摸双指捏合缩放（原生 Touch 事件——pointer 多指事件浏览器表现不一致）、右上角 +/−/重置按钮、键盘 +/−/0 快捷键；scale>1 时隐藏切页箭头
+- **实况照片同步缩放** — 实况 video+canvas 移入当前页 slot 随轨道/缩放对齐，单图实况只渲染一份；canvas 内部分辨率跟随 scale×dpr 绘制（`W*scale*dpr`）保持放大清晰
+- **canvas 像素总预算 400 万** — 全屏（大容器）+ 高 DPR + 高缩放下画布内部分辨率可冲上千万像素，每帧 `clearRect` + 两层 `drawImage` 光栅化开销过大导致卡顿；`budget = 4_000_000`，超预算按 `sqrt(budget/px)` 等比压缩内部分辨率，略降放大锐度换流畅
+- **手动切到实况图立即播放** — `slideBy`/`settleDrag`/`handleManualSwitch` 三处切页入口统一按目标图是否实况决定 `userInteracted`：实况不置位（实况自带节奏，切过去即 1s 封面预览→淡入播放，不被卡死在封面），静态图仍置位（暂停轮播满进度）
+- **移动端系统返回键重置缩放** — 只对触摸设备启用：进入缩放时 `history.pushState({ __biliCarouselZoom: true })` 压入标记；`popstate` 时若仍处于缩放 → `resetZoom()` + 重新压入标记（停留页内，再按一次才退出）；未缩放不补记录，浏览器指针自然滑向真实路由退出；桌面端保持原样直接退出
+- **全屏返回降级** — Android 浏览器无法拦截"返回键退出全屏"（无手势、不派发 popstate）：`fullscreenchange` 中检测到「退出全屏瞬间仍处于缩放」→ 重置缩放 + 立即重新 `requestFullscreen()` 重进全屏（把真退出留给下一次返回）；`catch(() => {})` 处理浏览器拒绝非手势重进（部分 Chrome），降级为「一次返回=重置+退全屏」
+- **全屏进出复位轨道状态** — 进全屏前复位 `dragX`/`transitioning`/`isSliding`/缩放，修复切页动画或拖动中进全屏导致三页轨道错位（内容贴左/右空、模糊背景跟随偏移）
+- **横屏高度自适应** — 播放器容器 `maxHeight: calc(max(240px, 100dvh - 5.5rem))`，防止 16:9 高度超过横屏视口高度导致溢出
+- **滑动切换阈值 1/5 页宽** — `settleDrag` 触发阈值从 1/4 页宽改为 1/5 页宽（`W * 0.2`），移动端滑动切换更灵敏
+- **全屏下进度条收窄** — 全屏时进度条左右 `padding: clamp(16px, 6vw, 48px)`（弹性间距避开手机四角圆弧）；只收窄进度条本身，控制栏保持全宽避免渐变背景截断
 
 ### 深浅色圆形遮罩扩散
 - 点击切换按钮 → 在按钮位置生成纯色圆（目标主题 body 背景色 `#fff` / `#09090b`），`z-index:-1` 背景层，只遮空白/骨架区域，不遮挡卡片/按钮/视频/文字

@@ -110,6 +110,7 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
     }
     return false;
   });
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const audioRef = useRef<HTMLAudioElement>(null);
   const audioUrlsRef = useRef<string[]>([]);
   const livePhotoVideoRef = useRef<HTMLVideoElement>(null);
@@ -123,21 +124,113 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
   const lastTickRef = useRef(0); // last RAF timestamp
   const modeRef = useRef<PlayMode>(playMode);
 
+  // ---- 缩放（center zoom，不跟随鼠标指针）----
+  // scale/position 与 ref 同步：pinch/wheel 高频触发中 React 渲染异步，
+  // 统一走 setScaleSync 立即更新 ref，交互判定永远拿最新值（同评论区灯箱思路）。
+  const [scale, setScale] = useState(1);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const scaleRef = useRef(1);
+  const posRef = useRef({ x: 0, y: 0 });
+  const [pinching, setPinching] = useState(false); // 双指捏合中（禁用过渡，跟手）
+  const setScaleSync = useCallback((next: number | ((s: number) => number)) => {
+    const s = typeof next === "function" ? next(scaleRef.current) : next;
+    const clamped = Math.min(Math.max(s, 0.5), 5);
+    scaleRef.current = clamped;
+    setScale(clamped);
+  }, []);
+  useEffect(() => { posRef.current = position; }, [position]);
+  useEffect(() => {
+    // 回到 100% 时缩放位移归零，确保居中回到相册模式
+    if (Math.abs(scale - 1) <= 0.05) setPosition({ x: 0, y: 0 });
+  }, [scale]);
+  // scale 接近 1（±5%）视为相册正常模式（拖动=切页）；否则为缩放模式（拖动=平移）
+  const zoomed = Math.abs(scale - 1) > 0.05;
+  const resetZoom = useCallback(() => {
+    setScaleSync(1);
+    setPosition({ x: 0, y: 0 });
+  }, [setScaleSync]);
+
+  // ---- 移动端系统返回键：缩放状态下按返回先重置缩放倍率，再按一次才退出页面 ----
+  // 进入缩放时压入一条标记历史记录；返回（popstate）时若仍处于缩放 → 重置缩放并重新压入
+  // （停留在页面），未缩放 → 不补记录，让浏览器返回指针滑向真实路由自然退出。
+  // 只对触摸设备启用，桌面端返回键保持原样直接退出页面。
+  const zoomMarkerPushedRef = useRef(false);
+  const isTouchDevice = typeof window !== "undefined" && ("ontouchstart" in window || navigator.maxTouchPoints > 0);
+  useEffect(() => {
+    if (!isTouchDevice) return;
+    if (zoomed && !zoomMarkerPushedRef.current) {
+      zoomMarkerPushedRef.current = true;
+      window.history.pushState({ __biliCarouselZoom: true }, "");
+    }
+    if (!zoomed) zoomMarkerPushedRef.current = false;
+  }, [zoomed, isTouchDevice]);
+
+  useEffect(() => {
+    if (!isTouchDevice) return;
+    const onPop = () => {
+      if (Math.abs(scaleRef.current - 1) > 0.05) {
+        // 缩放中按返回：重置缩放并重新压入标记，停留本页（再按返回才退出）
+        zoomMarkerPushedRef.current = true;
+        resetZoom();
+        window.history.pushState({ __biliCarouselZoom: true }, "");
+      } else {
+        // 未缩放：标记已随返回出栈，不补记录，浏览器指针继续滑向真实路由
+        zoomMarkerPushedRef.current = false;
+      }
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [isTouchDevice, resetZoom]);
+
+  // ---- 全屏状态跟踪：全屏 + 缩放下按系统返回 = 第一次重置缩放、第二次退出全屏 ----
+  // Android 浏览器无法拦截"返回键退出全屏"（无手势、不派发 popstate），
+  // 故在退出全屏瞬间：若仍处于缩放 → 重置缩放 + 立即重新请求进入全屏，把真退出留给下一次返回；
+  // 若浏览器拒绝非手势重进（部分 Chrome 版本），自动降级为"一次返回=重置+退全屏"，行为依旧合理。
+  // 非缩放状态退出全屏 → 不做任何干预，直接退出。
+  useEffect(() => {
+    const onFs = () => {
+      const fs = !!document.fullscreenElement;
+      setIsFullscreen(fs);
+      if (!fs && Math.abs(scaleRef.current - 1) > 0.05) {
+        zoomMarkerPushedRef.current = false;
+        resetZoom();
+        const el = containerRef.current;
+        if (el) el.requestFullscreen().catch(() => {});
+      }
+    };
+    document.addEventListener("fullscreenchange", onFs);
+    onFs();
+    return () => document.removeEventListener("fullscreenchange", onFs);
+  }, [resetZoom]);
+
   // ---- 相册式横向轨道：当前页 + 前后相邻页（循环）并排排布，拖动/滑动切换 ----
   // 轨道总宽 = 3×容器宽，居中显示 current 页（translateX = -W + dragX）。
   // 鼠标按住拖动实时跟手（dragX），松手后按位移滑动到相邻页或回弹。
   const [dragX, setDragX] = useState(0);
   const [transitioning, setTransitioning] = useState(false); // 滑动到位动画中
-  const [dragActive, setDragActive] = useState(false); // 鼠标按住拖动中（用于隐藏实况 canvas，避免遮挡相邻页）
+  const [dragActive, setDragActive] = useState(false); // 拖动/捏合中（禁用缩放过渡动画，保证跟手）
   const dragXRef = useRef(0);
   const isDraggingRef = useRef(false);      // 鼠标左键是否按住拖动中
   const dragMovedRef = useRef(false);       // 本次按下是否发生了拖拽（用于区分点击）
   const dragStartXRef = useRef(0);
+  const dragStartYRef = useRef(0);
   const dragBaseXRef = useRef(0);
+  const dragBaseYRef = useRef(0);
   const isSlidingRef = useRef(false);       // 滑动动画进行中，防止重复触发
   const containerWidthRef = useRef(0);
   const prevIndexRef = useRef(0);
   const nextIndexRef = useRef(0);
+  // 双指捏合缩放状态
+  const pinchActiveRef = useRef(false);
+  const pinchDistanceRef = useRef(0);
+  // 鼠标单击延迟 + 双击判定（避免双击缩放时两次 click 闪烁切换播放/暂停）
+  const mouseClickPendingRef = useRef<NodeJS.Timeout | null>(null);
+  const lastMouseClickAtRef = useRef(0);
+  // 最近一次触摸时间：鼠标 dblclick 忽略触摸合成的双击
+  const lastTouchTimeRef = useRef(0);
+  useEffect(() => () => {
+    if (mouseClickPendingRef.current) clearTimeout(mouseClickPendingRef.current);
+  }, []);
   useEffect(() => { prevIndexRef.current = (currentIndex - 1 + images.length) % images.length; });
   useEffect(() => { nextIndexRef.current = (currentIndex + 1) % images.length; });
 
@@ -322,10 +415,18 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
     if (isSlidingRef.current || isDraggingRef.current) return;
     const W = containerWidthRef.current || 0;
     if (!W) {
+      resetZoom();
       setCurrentIndex(prev => (prev + dir + images.length) % images.length);
       return;
     }
-    if (manual) setUserInteracted(true);
+    if (manual) {
+      // 手动切到实况图：不置 userInteracted（实况自带节奏，切过去即预览→淡入播放），
+      // 静态图仍置位（暂停轮播等用户看）
+      const target = (currentIndexRef.current + dir + images.length) % images.length;
+      setUserInteracted(liveVideosRef.current[target] ? false : true);
+    }
+    // 切页/自动推进前缩放归位，避免新页面带着旧缩放闪烁一帧
+    resetZoom();
     isSlidingRef.current = true;
     setTransitioning(true);
     // 向右切换（dir=1）：轨道向左滑一页（dragX=-W），下一张从右侧进入
@@ -349,9 +450,11 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
     const total = dragXRef.current;
     isSlidingRef.current = true;
     setTransitioning(true);
-    if (total <= -W * 0.25) {
+    // 触发阈值 = 1/5 页宽（原 1/4 页宽，移动端滑动切换更灵敏一些）
+    if (total <= -W * 0.2) {
       const target = nextIndexRef.current;
-      setUserInteracted(true);
+      // 手动切页：实况图不置 userInteracted（切过去即预览→淡入播放），静态图暂停轮播
+      setUserInteracted(liveVideosRef.current[target] ? false : true);
       dragXRef.current = -W;
       setDragX(-W);
       window.setTimeout(() => {
@@ -363,9 +466,10 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
         setTransitioning(false);
         isSlidingRef.current = false;
       }, 320);
-    } else if (total >= W * 0.25) {
+    } else if (total >= W * 0.2) {
       const target = prevIndexRef.current;
-      setUserInteracted(true);
+      // 手动切页：实况图不置 userInteracted（切过去即预览→淡入播放），静态图暂停轮播
+      setUserInteracted(liveVideosRef.current[target] ? false : true);
       dragXRef.current = W;
       setDragX(W);
       window.setTimeout(() => {
@@ -389,7 +493,9 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
 
   // Manual image switch - pauses auto-play
   const handleManualSwitch = useCallback((newIndex: number) => {
-    setUserInteracted(true);
+    // 手动切到实况图：期望立即播放动画（1s 封面预览后淡入），不能被 userInteracted 卡死在封面；
+    // 实况的"播放中"语义本身就带节奏，无需暂停轮播。切到静态图仍置位（暂停轮播等用户看）。
+    setUserInteracted(liveVideosRef.current[newIndex] ? false : true);
     const cur = currentIndexRef.current;
     if (newIndex === cur) return;
     const len = imagesLengthRef.current;
@@ -400,11 +506,12 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
       slideBy(diff as 1 | -1, true);
     } else {
       // 跳转非相邻页（进度条远跳）：直接切换，不做滑动
+      resetZoom();
       setCurrentIndex(newIndex);
       dragXRef.current = 0;
       setDragX(0);
     }
-  }, [slideBy]);
+  }, [slideBy, resetZoom]);
 
   // Reset elapsed on manual switch
   useEffect(() => {
@@ -624,20 +731,38 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
       const w = canvas.clientWidth || 0;
       const h = canvas.clientHeight || 0;
       if (w === 0 || h === 0) return;
-      if (canvas.width !== w || canvas.height !== h) {
-        canvas.width = w;
-        canvas.height = h;
+      // canvas 分辨率跟随缩放比例（×dpr）：CSS transform 把画布放大 scale 倍时，
+      // 画布内部以 scale*dpr 分辨率绘制，保持 1:1 屏幕像素清晰，避免放大后视频帧变糊。
+      // 像素总预算 400 万：全屏（大容器）+ 高 DPR + 高缩放下画布内部分辨率会冲上千万像素，
+      // 每帧 clearRect+两层 drawImage 光栅化开销过大导致卡顿；超预算按等比压缩内部分辨率，
+      // 略降放大后的锐度换取流畅播放。
+      const s = Math.min(Math.max(scaleRef.current, 1), 8);
+      const dpr = window.devicePixelRatio || 1;
+      const budget = 4_000_000;
+      let W = Math.max(1, Math.round(w * s * dpr));
+      let H = Math.max(1, Math.round(h * s * dpr));
+      const px = W * H;
+      if (px > budget) {
+        const r = Math.sqrt(budget / px);
+        W = Math.max(1, Math.round(W * r));
+        H = Math.max(1, Math.round(H * r));
       }
-      ctx.clearRect(0, 0, w, h);
+      W = Math.min(W, 4096);
+      H = Math.min(H, Math.round(4096 * (h / w)));
+      if (canvas.width !== W || canvas.height !== H) {
+        canvas.width = W;
+        canvas.height = H;
+      }
+      ctx.clearRect(0, 0, W, H);
       const fade = liveFadeRef.current;
       const ci = coverCanvasImgRef.current;
       if (fade < 1 && ci && ci.complete && ci.naturalWidth > 0) {
         ctx.globalAlpha = 1 - fade;
-        drawContain(ci, w, h);
+        drawContain(ci, W, H);
       }
       if (fade > 0 && v.videoWidth > 0 && v.videoHeight > 0) {
         ctx.globalAlpha = fade;
-        drawContain(v, w, h);
+        drawContain(v, W, H);
       }
       ctx.globalAlpha = 1;
     };
@@ -683,7 +808,8 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
 
   // Auto-play timer with smooth progress animation (static images only; live photo uses video timeupdate)
   useEffect(() => {
-    if (images.length <= 1 || !isPlaying || userInteracted || currentLiveVideo) {
+    // 缩放期间暂停自动轮播：正在放大查看细节的图不能被突然切走；退出缩放后从冻结进度继续
+    if (images.length <= 1 || !isPlaying || userInteracted || currentLiveVideo || zoomed) {
       if (autoPlayTimerRef.current) {
         clearInterval(autoPlayTimerRef.current);
         autoPlayTimerRef.current = null;
@@ -724,7 +850,7 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
       }
       if (progressRafRef.current) cancelAnimationFrame(progressRafRef.current);
     };
-  }, [images.length, isPlaying, userInteracted, currentIndex, getInterval, currentLiveVideo, advanceImage]);
+  }, [images.length, isPlaying, userInteracted, currentIndex, getInterval, currentLiveVideo, advanceImage, zoomed]);
 
   // Reset userInteracted when user pauses and resumes
   useEffect(() => {
@@ -974,17 +1100,26 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
       } else if (e.key === " ") {
         e.preventDefault();
         togglePlay();
+      } else if (key === "+" || key === "=") {
+        e.preventDefault();
+        setScaleSync((s) => Math.min(s + 0.25, 5));
+      } else if (key === "-") {
+        e.preventDefault();
+        setScaleSync((s) => Math.max(s - 0.25, 0.5));
+      } else if (key === "0") {
+        e.preventDefault();
+        resetZoom();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [currentIndex, images.length, handleManualSwitch, togglePlay]);
+  }, [currentIndex, images.length, handleManualSwitch, togglePlay, setScaleSync, resetZoom]);
 
-  // 交互（拖拽/点击/双击）：用 Pointer 事件统一处理鼠标与触摸。
-  // - 鼠标左键 / 触摸按住拖动：图片实时跟手平移，松手后滑到相邻页或回弹（相册式）。
-  // - 无位移的触摸 = 点击：双击切换播放/暂停，单击切换控制栏可见性。
-  // - 无位移的鼠标 = 单击：交给 click 事件处理播放/暂停。
-  // touchstart 仅在非交互区域 preventDefault，阻断移动端合成 click，避免与 pointerup 重复处理。
+  // 交互（拖拽/点击/双击/捏合/滚轮缩放）：Pointer 事件统一处理鼠标与触摸，
+  // 触摸的双指捏合缩放用原生 Touch 事件（pointer 多指事件浏览器表现不一致）。
+  // - 相册正常模式（scale≈1）：拖动 = 拖轨道切页；缩放模式（scale>1）：拖动 = 平移图片。
+  // - 鼠标：滚轮缩放、双击缩放；单击经 350ms 延迟判断双击，之后再触发播放/暂停（防闪烁）。
+  // - 触摸：双指捏合缩放；双击播放/暂停，单击控制栏可见性。
   // 所有回调通过 ref 访问，effect 只运行一次。
   useEffect(() => {
     const el = containerRef.current;
@@ -996,15 +1131,83 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
     const ro = new ResizeObserver(measure);
     ro.observe(el);
 
-    const onTouchStart = (e: Event) => {
-      // Block click synthesis on non-interactive areas
-      const t = (e.target as HTMLElement);
+    const dist = (pa: Touch, pb: Touch) => Math.hypot(pa.clientX - pb.clientX, pa.clientY - pb.clientY);
+
+    // scale 接近 1（±5%）即视为相册正常模式（拖动=切页）；否则为缩放模式（拖动=平移）。
+    // 避免 pinch 残留浮点（如 1.0000001）导致永远进入缩放平移。
+    const isZoomedScale = (s: number) => Math.abs(s - 1) > 0.05;
+
+    const onTouchStart = (e: TouchEvent) => {
+      lastTouchTimeRef.current = Date.now();
+      const t = e.target as HTMLElement;
       if (!t.closest("button") && !t.closest("a")) {
         e.preventDefault();
+      }
+      if (e.touches.length >= 2) {
+        // 双指 = 捏合缩放（无论单指拖动进行到哪都立即转入）
+        if (isSlidingRef.current) return;
+        e.preventDefault();
+        pinchActiveRef.current = true;
+        setPinching(true);
+        setDragActive(false);
+        isDraggingRef.current = false;
+        dragMovedRef.current = false;
+        pinchDistanceRef.current = dist(e.touches[0], e.touches[1]);
+        // 转入缩放时轨道必须归位（轨道偏移会随 zoomed 语义残留，导致当前页偏出屏幕）
+        if (!isZoomedScale(scaleRef.current)) {
+          dragXRef.current = 0;
+          setDragX(0);
+          setPosition({ x: 0, y: 0 });
+          posRef.current = { x: 0, y: 0 };
+        }
+        return;
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length >= 2 && pinchActiveRef.current) {
+        // 增量式缩放：每次捏合位移按 0.01 倍累加到 scale，连续跟手、无跳档。围绕中心缩放。
+        e.preventDefault();
+        const d = dist(e.touches[0], e.touches[1]);
+        const delta = (d - pinchDistanceRef.current) * 0.01;
+        pinchDistanceRef.current = d;
+        setScaleSync((s) => Math.min(Math.max(s + delta, 0.5), 5));
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      const t = e.touches;
+      const wasPinch = pinchActiveRef.current;
+      if (t.length >= 2) return;
+      if (wasPinch) {
+        // 捏合结束（剩余 0 或 1 根手指都算结束）
+        pinchActiveRef.current = false;
+        setPinching(false);
+        setDragActive(false);
+        if (!isZoomedScale(scaleRef.current)) {
+          setPosition({ x: 0, y: 0 });
+          posRef.current = { x: 0, y: 0 };
+        }
+        // 若还剩一根手指，重新以该手指开启单指拖动（zoomed → 平移，否则拖轨道）
+        if (t.length === 1) {
+          isDraggingRef.current = true;
+          dragMovedRef.current = false;
+          dragStartXRef.current = t[0].clientX;
+          dragStartYRef.current = t[0].clientY;
+          if (isZoomedScale(scaleRef.current)) {
+            dragBaseXRef.current = posRef.current.x;
+            dragBaseYRef.current = posRef.current.y;
+          } else {
+            dragBaseXRef.current = dragXRef.current;
+            dragBaseYRef.current = 0;
+          }
+        }
+        return;
       }
     };
 
     const onPointerDown = (e: Event) => {
+      if (pinchActiveRef.current) return;
       const pe = e as PointerEvent;
       if (pe.pointerType !== "mouse" && pe.pointerType !== "touch") return;
       if (pe.pointerType === "mouse" && pe.button !== 0) return;
@@ -1014,17 +1217,30 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
       isDraggingRef.current = true;
       dragMovedRef.current = false;
       dragStartXRef.current = pe.clientX;
-      dragBaseXRef.current = dragXRef.current;
+      dragStartYRef.current = pe.clientY;
+      if (isZoomedScale(scaleRef.current)) {
+        dragBaseXRef.current = posRef.current.x;
+        dragBaseYRef.current = posRef.current.y;
+      } else {
+        dragBaseXRef.current = dragXRef.current;
+        dragBaseYRef.current = 0;
+      }
       el.setPointerCapture?.(pe.pointerId);
     };
 
     const onPointerMove = (e: Event) => {
-      if (!isDraggingRef.current) return;
+      if (!isDraggingRef.current || pinchActiveRef.current) return;
       const pe = e as PointerEvent;
       const dx = pe.clientX - dragStartXRef.current;
-      if (Math.abs(dx) > 6 && !dragMovedRef.current) {
+      const dy = pe.clientY - dragStartYRef.current;
+      if ((Math.abs(dx) > 6 || Math.abs(dy) > 6) && !dragMovedRef.current) {
         dragMovedRef.current = true;
         setDragActive(true);
+      }
+      if (isZoomedScale(scaleRef.current)) {
+        // 缩放模式：拖动 = 平移图片
+        setPosition({ x: dragBaseXRef.current + dx, y: dragBaseYRef.current + dy });
+        return;
       }
       const W = containerWidthRef.current || 0;
       if (!W) return;
@@ -1034,12 +1250,13 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
     };
 
     const onPointerUp = (e: Event) => {
-      if (!isDraggingRef.current) return;
+      if (!isDraggingRef.current || pinchActiveRef.current) return;
       isDraggingRef.current = false;
       setDragActive(false);
       const pe = e as PointerEvent;
       if (dragMovedRef.current) {
-        settleDragRef.current();
+        // 缩放模式下拖动是平移，不结算轨道滑动
+        if (!isZoomedScale(scaleRef.current)) settleDragRef.current();
         // dragMovedRef 保持 true 让随后的 click 被忽略，再延迟复位
         window.setTimeout(() => { dragMovedRef.current = false; }, 0);
         return;
@@ -1069,24 +1286,76 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
         return;
       }
       if (t.closest("button") || t.closest("a")) return;
-      togglePlayRef.current();
+      const now = Date.now();
+      if (now - lastMouseClickAtRef.current < 350) {
+        // 350ms 内第二下 click = 双击的一部分：取消延迟的播放/暂停，交给 dblclick 缩放
+        if (mouseClickPendingRef.current) {
+          clearTimeout(mouseClickPendingRef.current);
+          mouseClickPendingRef.current = null;
+        }
+        lastMouseClickAtRef.current = 0;
+        return;
+      }
+      lastMouseClickAtRef.current = now;
+      if (mouseClickPendingRef.current) clearTimeout(mouseClickPendingRef.current);
+      // 延迟执行给双击留出识别窗口，避免双击缩放时播放/暂停闪烁两次
+      mouseClickPendingRef.current = setTimeout(() => {
+        mouseClickPendingRef.current = null;
+        togglePlayRef.current();
+      }, 350);
+    };
+
+    // 鼠标双击缩放（原生 dblclick 最可靠）。触摸双击已用于播放/暂停，
+    // 移动端浏览器为快速两次触摸合成的 dblclick 带触摸时间窗兜底忽略。
+    const onMouseDblClick = (e: MouseEvent) => {
+      if (e.detail !== 2) return;
+      if (Date.now() - lastTouchTimeRef.current < 800) return;
+      e.preventDefault();
+      if (mouseClickPendingRef.current) {
+        clearTimeout(mouseClickPendingRef.current);
+        mouseClickPendingRef.current = null;
+      }
+      if (isZoomedScale(scaleRef.current)) {
+        resetZoom();
+      } else {
+        setScaleSync(2.5);
+        setPosition({ x: 0, y: 0 });
+        posRef.current = { x: 0, y: 0 };
+      }
+    };
+
+    // 鼠标滚轮缩放（非 passive 才能 preventDefault，阻断页面滚动）
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      setScaleSync((s) => Math.min(Math.max(s + delta, 0.5), 5));
     };
 
     el.addEventListener("touchstart", onTouchStart, { capture: true, passive: false });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd);
+    el.addEventListener("touchcancel", onTouchEnd);
     el.addEventListener("pointerdown", onPointerDown);
     el.addEventListener("pointermove", onPointerMove);
     el.addEventListener("pointerup", onPointerUp);
     el.addEventListener("click", onClick);
+    el.addEventListener("dblclick", onMouseDblClick);
+    el.addEventListener("wheel", onWheel, { passive: false });
 
     return () => {
       el.removeEventListener("touchstart", onTouchStart);
+      el.removeEventListener("touchmove", onTouchMove);
+      el.removeEventListener("touchend", onTouchEnd);
+      el.removeEventListener("touchcancel", onTouchEnd);
       el.removeEventListener("pointerdown", onPointerDown);
       el.removeEventListener("pointermove", onPointerMove);
       el.removeEventListener("pointerup", onPointerUp);
       el.removeEventListener("click", onClick);
+      el.removeEventListener("dblclick", onMouseDblClick);
+      el.removeEventListener("wheel", onWheel);
       ro.disconnect();
     };
-  }, []); // Empty deps — all state accessed via refs
+  }, [resetZoom, setScaleSync]);
 
   if (images.length === 0) {
     return (
@@ -1114,41 +1383,11 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
         />
       )}
 
-      {/* 实况视频：仅在交叉淡化阶段渲染，opacity:0 隐藏，仅作为 canvas 的帧源。
-           GPU 把 <video> 当独立合成平面，不参与和 HTML 层的逐像素 alpha 混合，
-           Edge 下即使 opacity:0 的合成层也会遮挡下方内容，因此视频不直接显示，
-           由下方 opaque 的 canvas 完全盖住它；视频仅负责解码、驱动 onEnded/进度/首帧。 */}
-      {currentLiveVideo && liveFadeVisible && (
-        <video
-          ref={livePhotoVideoRef}
-          src={currentLiveVideo}
-          muted
-          playsInline
-          loop={false}
-          preload="auto"
-          onEnded={handleLiveEnded}
-          className="pointer-events-none absolute inset-0 z-10 opacity-0"
-          data-live-phase={livePhase}
-          aria-hidden
-        />
-      )}
-
-      {/* 实况交叉淡化 canvas（单 canvas 方案）：
-           同一画布里用 globalAlpha 逐帧混合「封面帧 + 实况视频帧」。
-           canvas 置于封面 <img> 上方（z-[12] > z-[11]），实况阶段由 canvas 完全覆盖封面；
-           封面 <img> 常驻在下层，作为「canvas 首帧绘制前的无缝底衬」，消除淡入时的空档闪烁。 */}
-      {currentLiveVideo && liveFadeVisible && !dragActive && (
-        <canvas
-          ref={liveCanvasRef}
-          className="absolute inset-0 z-[12] h-full w-full"
-          style={{ pointerEvents: "none" }}
-          data-live-phase={livePhase}
-        />
-      )}
-
       {/* 相册式横向轨道：当前页 + 前后相邻页（循环）并排，鼠标按住拖动实时跟手平移，
           松手后滑动到相邻页或回弹。每页同时包含自己的高斯模糊背景与清晰主图，二者一起平移。
-          每页 overflow-hidden 把模糊（scale-110 + blur 60px）裁剪在本页内，避免相邻页模糊串色。 */}
+          每页 overflow-hidden 把模糊（scale-110 + blur 60px）裁剪在本页内，避免相邻页模糊串色。
+          缩放 transform 应用在当前页内容容器上：封面/模糊背景/实况 canvas 一起缩放；
+          实况 video（隐藏帧源）+ canvas 也移入当前页内，放大时随页对齐、跟随轨道平移。 */}
       {(() => {
         const prevIdx = (currentIndex - 1 + images.length) % images.length;
         const nextIdx = (currentIndex + 1) % images.length;
@@ -1160,30 +1399,80 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
               transition: transitioning ? "transform 320ms cubic-bezier(0.22, 1, 0.36, 1)" : "none",
             }}
           >
-            {[prevIdx, currentIndex, nextIdx].map((idx, slot) => (
-              <div key={`page-slot-${slot}`} className="relative h-full w-full shrink-0 overflow-hidden">
-                <img
-                  src={images[idx]}
-                  alt=""
-                  className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover blur-[60px] brightness-[0.9] saturate-[1.15]"
-                  decoding="async"
-                  draggable={false}
-                />
-                <img
-                  src={images[idx]}
-                  alt={`Image ${idx + 1}`}
-                  onLoad={(e) => {
-                    const img = e.currentTarget;
-                    if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-                      imageRatioRefs.current[idx] = img.naturalWidth / img.naturalHeight;
-                      setRatioTick((n) => n + 1);
+            {[prevIdx, currentIndex, nextIdx].map((idx, slot) => {
+              // 三元槽位中 slot===1 恒为当前页；单图时三个槽位 idx 相同（prev=current=next），
+              // 必须用 slot 判定，否则实况 canvas/video 与缩放 transform 会渲染三份。
+              const isCurrent = slot === 1;
+              return (
+                <div key={`page-slot-${slot}`} className="relative h-full w-full shrink-0 overflow-hidden">
+                  <div
+                    className="absolute inset-0"
+                    style={
+                      isCurrent
+                        ? {
+                            // scale 在 translate 之后（CSS 矩阵右手先应用）：translate 保持常量偏移，
+                            // 不会随 scale 放大；transformOrigin 用容器中心，缩放始终围绕画面中心。
+                            transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
+                            transformOrigin: "50% 50%",
+                            transition: dragActive || pinching ? "none" : "transform 0.12s ease-out",
+                          }
+                        : undefined
                     }
-                  }}
-                  className="absolute inset-0 h-full w-full object-contain"
-                  draggable={false}
-                />
-              </div>
-            ))}
+                  >
+                    <img
+                      src={images[idx]}
+                      alt=""
+                      className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover blur-[60px] brightness-[0.9] saturate-[1.15]"
+                      decoding="async"
+                      draggable={false}
+                    />
+                    {/* 实况交叉淡化 canvas（单 canvas 方案）：同一画布里用 globalAlpha
+                        逐帧混合「封面帧 + 实况视频帧」。canvas 置于封面 <img> 上方完全覆盖它；
+                        封面 <img> 常驻在下层，作为「canvas 首帧绘制前的无缝底衬」。
+                        移入当前页内后随缩放/平移/轨道拖动自然对齐，不再需要 dragActive 隐藏。 */}
+                    {isCurrent && currentLiveVideo && liveFadeVisible && (
+                      <>
+                        {/* 实况视频：仅在交叉淡化阶段渲染，opacity:0 隐藏，仅作为 canvas 的帧源。
+                            GPU 把 <video> 当独立合成平面，不参与和 HTML 层的逐像素 alpha 混合，
+                            Edge 下即使 opacity:0 的合成层也会遮挡下方内容，因此视频不直接显示，
+                            由上方 opaque 的 canvas 完全盖住它；视频仅负责解码、驱动 onEnded/进度/首帧。 */}
+                        <video
+                          ref={livePhotoVideoRef}
+                          src={currentLiveVideo}
+                          muted
+                          playsInline
+                          loop={false}
+                          preload="auto"
+                          onEnded={handleLiveEnded}
+                          className="pointer-events-none absolute inset-0 z-10 opacity-0"
+                          data-live-phase={livePhase}
+                          aria-hidden
+                        />
+                        <canvas
+                          ref={liveCanvasRef}
+                          className="absolute inset-0 z-[12] h-full w-full"
+                          style={{ pointerEvents: "none" }}
+                          data-live-phase={livePhase}
+                        />
+                      </>
+                    )}
+                    <img
+                      src={images[idx]}
+                      alt={`Image ${idx + 1}`}
+                      onLoad={(e) => {
+                        const img = e.currentTarget;
+                        if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                          imageRatioRefs.current[idx] = img.naturalWidth / img.naturalHeight;
+                          setRatioTick((n) => n + 1);
+                        }
+                      }}
+                      className="absolute inset-0 h-full w-full object-contain"
+                      draggable={false}
+                    />
+                  </div>
+                </div>
+              );
+            })}
           </div>
         );
       })()}
@@ -1248,9 +1537,21 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
 
         return (
           <div className="absolute inset-x-0 bottom-0 z-20">
-            {/* 进度条：始终显示，位于控制栏上方；控制栏升起时被托起，落下时回到底部 */}
+            {/* 进度条：始终显示，位于控制栏上方；控制栏升起时被托起，落下时回到底部。
+                全屏下左右收窄避开手机四角圆弧（clamp 弹性间距）——只收窄进度条本身，
+                控制栏保持全宽，黑色渐变背景不被截断成"长方形刘海" */}
             {progressBar && (
-              <div className="pointer-events-auto pb-1">
+              <div
+                className="pointer-events-auto pb-1"
+                style={
+                  isFullscreen
+                    ? {
+                        paddingLeft: "clamp(16px, 6vw, 48px)",
+                        paddingRight: "clamp(16px, 6vw, 48px)",
+                      }
+                    : undefined
+                }
+              >
                 {progressBar}
               </div>
             )}
@@ -1329,6 +1630,13 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
                   if (document.fullscreenElement) {
                     document.exitFullscreen();
                   } else {
+                    // 进全屏前复位轨道偏移与缩放：切页动画/拖动中的残留 dragX 会让
+                    // 全屏后的三页轨道错位（内容贴左/右空、模糊背景跟随偏移）
+                    dragXRef.current = 0;
+                    setDragX(0);
+                    setTransitioning(false);
+                    isSlidingRef.current = false;
+                    resetZoom();
                     el.requestFullscreen();
                   }
                 }
@@ -1379,8 +1687,53 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
         );
       })()}
 
-      {/* Navigation arrows - visible on hover, hidden on mobile */}
-      {images.length > 1 && (
+      {/* Zoom controls（右上角，始终可见；缩放状态时隐藏左右切换箭头，避免与平移误触） */}
+      <div className="absolute right-3 top-3 z-40 flex flex-col gap-1.5">
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setScaleSync((s) => Math.min(s + 0.25, 5)); }}
+          title="放大 (+)"
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white/90 transition-colors hover:bg-black/80"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            <line x1="11" y1="8" x2="11" y2="14" />
+            <line x1="8" y1="11" x2="14" y2="11" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); setScaleSync((s) => Math.max(s - 0.25, 0.5)); }}
+          title="缩小 (-)"
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white/90 transition-colors hover:bg-black/80"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            <line x1="8" y1="11" x2="14" y2="11" />
+          </svg>
+        </button>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); resetZoom(); }}
+          title="重置缩放 (0)"
+          className="flex h-9 w-9 items-center justify-center rounded-full bg-black/50 text-white/90 transition-colors hover:bg-black/80"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0118.8-4.3M22 12.5a10 10 0 01-18.8 4.2" />
+          </svg>
+        </button>
+      </div>
+      {/* Zoom level indicator */}
+      {zoomed && (
+        <div className="pointer-events-none absolute right-3 top-[8.9rem] z-40 rounded-full bg-black/60 px-3 py-1 text-xs font-medium text-white/80">
+          {Math.round(scale * 100)}%
+        </div>
+      )}
+
+      {/* Navigation arrows - visible on hover, hidden on mobile（缩放时隐藏，平移代替切页） */}
+      {images.length > 1 && !zoomed && (
         <>
           <button
             type="button"
@@ -1608,7 +1961,10 @@ export default function VideoPlaySection({
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
       >
-        <div className="aspect-video overflow-hidden rounded-lg bg-black">
+        <div
+          className="aspect-video w-full overflow-hidden rounded-lg bg-black"
+          style={{ maxHeight: "calc(max(240px, 100dvh - 5.5rem))" }}
+        >
           {state.video.postType === "image_text" && state.video.imageUrls ? (
             <ImageCarousel
               imageUrls={JSON.parse(state.video.imageUrls)}

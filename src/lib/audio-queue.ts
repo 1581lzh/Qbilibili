@@ -120,7 +120,7 @@ async function processItem(item: QueueItem): Promise<void> {
 
     // Fix local paths: convert /uploads/... to full URL
     if (videoUrl && videoUrl.startsWith("/")) {
-      videoUrl = `https://your-domain.com${videoUrl}`;
+      videoUrl = `${process.env.NEXTAUTH_URL || "http://localhost:3005"}${videoUrl}`;
     }
 
     if (!videoUrl && video.vodVideoId) {

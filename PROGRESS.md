@@ -6,19 +6,40 @@
 
 ## 已完成工作
 
+### 本次会话（图文播放器缩放 + 实况切页立即播放 + 移动端返回键重置缩放 + 全屏复位 + 横屏适配）
+- **`图文播放器缩放（上一阶段补记）`** — 纯前端中心缩放（缩放中心为容器中心，不跟随鼠标指针），范围 0.5-5 倍：
+  - 交互入口：鼠标滚轮缩放、鼠标双击缩放、触摸双指捏合缩放（`video-play-section.tsx`）、右上角 +/−/重置按钮、键盘 +/−/0 快捷键
+  - 模式切换：scale>1 时拖动 = 平移图片、切页箭头隐藏；scale≈1（±5%）恢复相册拖拽切页；回到 100% 时位移归零居中
+  - 缩放期间暂停自动轮播（放大查看的图不被切走），退出缩放继续；切页/进度条跳转/自动推进前 `resetZoom()` 自动归位，避免新页面带旧缩放闪烁一帧
+  - 状态同步：`scaleRef`/`posRef` 与 state 统一走 `setScaleSync` 立即更新（pinch/wheel 高频触发中 React 渲染异步，交互判定永远读最新值，同评论灯箱思路）；拖动/捏合中禁用过渡动画保证跟手
+  - 实况照片同步缩放：canvas 绘制分辨率跟随 scale×dpr 保持放大清晰；实况 video+canvas 移入当前页 slot 随轨道/缩放对齐，单图实况只渲染一份
+- **`手动切到实况图立即播放`** — `slideBy`/`settleDrag`/`handleManualSwitch` 三处切页入口统一按目标图是否为实况决定是否置 `userInteracted`：切到实况图不置位（实况自带节奏，切过去即 1s 封面预览→淡入播放，不会被卡死在封面），切到静态图仍置位（暂停轮播、满进度显示等用户看）
+- **`移动端系统返回键重置缩放`** — 触摸设备 popstate + pushState 标记方案：进入缩放时压入一条标记历史记录；返回（popstate）时若仍处于缩放 → 重置缩放倍率并重新压入标记（停留在页面），再按一次才退出；未缩放不补记录、不拦截，浏览器返回指针自然滑向真实路由退出；桌面端不启用
+- **`全屏返回降级`** — Android 浏览器无法拦截"返回键退出全屏"（无手势、不派发 popstate），故 `fullscreenchange` 中检测到「退出全屏瞬间仍处于缩放」→ 重置缩放 + 立即重新 `requestFullscreen()` 重进全屏，把真退出留给下一次返回；浏览器拒绝非手势重进（部分 Chrome 版本）时自动降级为「一次返回=重置+退全屏」，行为依旧合理
+- **`全屏进出复位轨道状态`** — 进全屏前复位 `dragX`/`transitioning`/`isSliding`/缩放，修复切页动画或拖动中进全屏导致三页轨道错位（内容贴左/右空、模糊背景跟随偏移）；退出全屏同步复位
+- **`移动横屏播放器高度自适应`** — 播放器容器 `max-height = calc(max(240px, 100dvh - 5.5rem))`，防止 16:9 高度超过横屏视口高度导致溢出（移动端横屏时播放器不会被顶出屏幕）
+- **`滑动切换阈值 1/4 → 1/5 页宽`** — `settleDrag` 触发阈值从 1/4 页宽（W*0.25）改为 1/5 页宽（W*0.2），移动端滑动切换更灵敏
+- **`全屏下进度条收窄`** — 图文播放器全屏时进度条左右 `padding: clamp(16px, 6vw, 48px)` 避开手机四角圆弧；只收窄进度条本身，控制栏保持全宽避免渐变背景截断
+- **`实况 canvas 像素预算`** — 画布内部分辨率跟随 scale×dpr，原 4096px 上限在全屏 + 高 DPR + 高缩放场景下每帧 `clearRect` + 两层 `drawImage` 光栅化近千万像素导致卡顿；新增像素总预算 400 万（`budget = 4_000_000`），超预算按 `sqrt(budget/px)` 等比压缩内部分辨率，略降放大后的锐度换取流畅播放
+- **`运维`** — 使用 `systemctl` 管理服务（`bilibili.service`，端口 3005）；服务器内存 3.6G，编译构建前需先 `sudo systemctl stop bilibili.service` 释放内存，再 `export NODE_OPTIONS=--max-old-space-size=1536 && npm run build`，完成后重启服务（`sudo systemctl start bilibili.service`）
+
 ### 本次会话（图文实况视频时长上限放宽至 20 秒 + 实况预览居中修复）
 - **`实况时长上限`** — 图文投稿实况视频最大时长从 4 秒放宽至 20 秒：`src/components/upload/image-text-upload.tsx` `MAX_LIVE_VIDEO_SECONDS` 4 → 20，覆盖三条校验路径（纯视频文件、.livp/HEIC 配对视频、独立实况视频）；上传提示文案同步改为「≤20 秒的短视频作为实况」，超时弹窗文案改为「图文投稿中的实况视频最长 20 秒，较长视频请前往视频投稿」；播放端无需改动（实况图本就按视频完整时长分配轮播时间）
 - **`实况预览居中修复`** — 图文投稿左侧大预览中实况预览不居中：`LivePhotoPreview` 根容器原只有 `relative` 无高度，内部封面 `<img>` 的 `h-full w-full object-contain` 高度解析失效（按原始尺寸渲染、不在容器内居中）；根容器补 `h-full w-full` 后与普通图片一致等比缩放居中显示
+- **`同步`** — Qbilibili 同步至 6108b2a
 
 ### 本次会话（背景音乐支持 .m4a + 小文件上传 Content-Type 修复）
 - **`格式支持`** — 音乐白名单新增 `.m4a`（Apple 音频格式，AAC 编码，所有主流浏览器可播）：`src/app/api/upload/route.ts` `ALLOWED_MUSIC_EXTENSIONS`
 - **`Content-Type 修复`** — 小文件（≤5MB，含音乐场景）走 `oss.put(filename, buffer)` 时未传 mime，OSS 以 `application/octet-stream` 存储导致播放器无法按音频解码；补传 `file.type`（`{ mime: file.type || "application/octet-stream" }`），大文件流式分支原本已带
+- **`同步`** — Qbilibili 同步至 9728908
+
 ### 本次会话（上传 400 错误详情透出 + 非白名单图片格式转 JPEG）
 - **`根因`** — /api/upload 校验失败（超过 15MB / 扩展名不在白名单等）返回 400，前端三处上传逻辑（图文投稿 uploadFileToOss、编辑页封面、评论图片）都丢弃响应体细节统一报「文件上传失败」，用户无法得知真实原因（此前 429 为另一独立问题已修复）
 - **`错误透出`** — 三处上传失败时解析响应体 `error` 字段并展示（如「文件上传失败：不支持的文件格式：.heic」），定位问题无需再翻代码
 - **`上传日志`** — route.ts 的 400（缺文件/类型不支持/超限/扩展名不支持）与 429 分支增加 `console.warn`（用户名/文件名/大小/MIME/type），生产排障直接看 journalctl
 - **`格式兜底`** — `src/lib/image-compress.ts` 新增 `convertToJpeg()`：浏览器可解码但后端白名单缺失的格式（.avif/.heif/.tiff 等）强制转 JPEG（缩放到 2560 内、quality 0.92），图文投稿选择此类图片时自动转换再加入；canvas 解码失败则提示跳过该图片，不再把不支持的文件原样上传
 - **`踩坑`** — 日志构造字符串时 file 可能为 null，需可选链（`file?.name`）否则 TypeScript 类型检查失败；提交前必须 `npm run build` 全量验证
+- **`同步`** — Qbilibili 同步至 1b40959
 
 ### 本次会话（上传限流放宽，修复图文投稿 429 上传失败）
 - **`限流放宽`** — 上传接口限流从 50 次/8 分钟/用户放宽为 300 次/30 分钟/用户（`src/lib/rate-limit.ts` `RATE_LIMITS.upload`）
