@@ -16,6 +16,11 @@ import { isEditableTarget, isComposingEvent } from "@/lib/keyboard";
 import { avatarColorFor } from "@/lib/avatar";
 import EmojiText from "@/components/ui/emoji-text";
 
+// 原生事件守卫：容器上的原生监听（pointerdown/click/dblclick/touchstart）无法被 React stopPropagation 阻止，
+// 必须在原生层排除控件。排除范围：按钮/链接/音量弹层/各类输入元素（控制栏 [data-controlbar] 由调用方单独处理）。
+const isControlTarget = (t: HTMLElement | null): boolean =>
+  !!t && !!t.closest("button, a, [data-volume-popup], input, select, textarea");
+
 interface VideoInfo {
   id: string;
   title: string;
@@ -1140,7 +1145,7 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
     const onTouchStart = (e: TouchEvent) => {
       lastTouchTimeRef.current = Date.now();
       const t = e.target as HTMLElement;
-      if (!t.closest("button") && !t.closest("a")) {
+      if (!isControlTarget(t)) {
         e.preventDefault();
       }
       if (e.touches.length >= 2) {
@@ -1212,7 +1217,7 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
       if (pe.pointerType !== "mouse" && pe.pointerType !== "touch") return;
       if (pe.pointerType === "mouse" && pe.button !== 0) return;
       const t = pe.target as HTMLElement;
-      if (t.closest("button") || t.closest("a") || t.closest("[data-controlbar]")) return;
+      if (t.closest("[data-controlbar]") || isControlTarget(t)) return;
       if (isSlidingRef.current || isDraggingRef.current) return;
       isDraggingRef.current = true;
       dragMovedRef.current = false;
@@ -1278,14 +1283,14 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
     const onClick = (e: Event) => {
       // 拖拽松手后触发的 click 视为拖动的一部分，不处理（不触发播放/暂停）
       if (dragMovedRef.current) { dragMovedRef.current = false; return; }
-      // 忽略按钮/链接的点击（React stopPropagation 无法阻止原生事件冒泡到此）
+      // 忽略按钮/链接/输入/音量弹层等控件的点击（React stopPropagation 无法阻止原生事件冒泡到此）
       const t = (e as MouseEvent).target as HTMLElement;
+      if (isControlTarget(t)) return;
       // 点击控制栏（含空白处）不触发播放/暂停，只切换控制栏可见性
       if (t.closest("[data-controlbar]")) {
         setShowControls(prev => !prev);
         return;
       }
-      if (t.closest("button") || t.closest("a")) return;
       const now = Date.now();
       if (now - lastMouseClickAtRef.current < 350) {
         // 350ms 内第二下 click = 双击的一部分：取消延迟的播放/暂停，交给 dblclick 缩放
@@ -1310,6 +1315,7 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
     const onMouseDblClick = (e: MouseEvent) => {
       if (e.detail !== 2) return;
       if (Date.now() - lastTouchTimeRef.current < 800) return;
+      if (isControlTarget(e.target as HTMLElement)) return;
       e.preventDefault();
       if (mouseClickPendingRef.current) {
         clearTimeout(mouseClickPendingRef.current);
@@ -1663,6 +1669,7 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
             )}
             {showVolume && volPopupPos && (
               <div
+                data-volume-popup
                 onMouseEnter={keepVolumeVisible}
                 onMouseLeave={() => { setShowVolume(false); if (volumeTimerRef.current) { clearTimeout(volumeTimerRef.current); volumeTimerRef.current = null; } }}
                 className="absolute z-30 flex flex-col items-center gap-1 rounded-md bg-black/80 px-2 py-2"

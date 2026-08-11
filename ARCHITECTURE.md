@@ -622,12 +622,13 @@ sudo firewall-cmd --reload
 - **图文左右切换按钮修复** — 按钮加 `z-30`（原被主图 `z-10` 盖住导致点击失效，用控制台 `elementFromPoint` 诊断确认）；hover 时背景蒙版加深 40%（`bg-black/50→90`）
 - **图文进度条增强** — 每节从 `<div>` 改为 `<button>`，点击跳转到对应图片；悬停加粗 `3px→9px`（中线对称扩展，80ms 过渡）
 - **图文控制栏空白点击修复** — 控制栏加 `data-controlbar` 标记，点击控制栏空白只切换可见性，不触发播放/暂停
-- **图文音量控制** — 控制栏新增音量按钮（Volume2/Volume1/VolumeX 图标随音量变化），点击静音/取消静音，悬停弹出滑块调节背景音乐音量（渐变显示填充进度，注入 CSS 让 thumb 圆心对齐轨道中线，Tailwind 任意变体对 range 伪元素不可靠）；音量条悬停弹出 1.5s 自动隐藏（滑入滑块取消定时器保持显示），音量/静音状态按用户存数据库（User.volume/muted，`/api/user/volume`，滑块拖动 300ms 防抖）
+- **图文音量控制** — 控制栏新增音量按钮（Volume2/Volume1/VolumeX 图标随音量变化），点击静音/取消静音，悬停弹出滑块调节背景音乐音量（渐变显示填充进度，注入 CSS 让 thumb 圆心对齐轨道中线，Tailwind 任意变体对 range 伪元素不可靠）；音量条悬停弹出 1.5s 自动隐藏（滑入滑块取消定时器保持显示），音量/静音状态按用户存数据库（User.volume/muted，`/api/user/volume`，滑块拖动 300ms 防抖；滑块/按钮等控件操作受统一原生守卫保护，调节音量不误触播放/暂停、切页、缩放（详见下方「音量滑块等控件误触发修复」））
 - **视频播放器音量与图文共享** — VideoPlayer 接入共享音量状态（`src/lib/volume.ts` + `/api/user/volume` GET/PUT）：初始化时 `fetchVolume` 读取并 `player.setVolume()`/`tag.muted` 应用；监听 `volumechange`/`volumnchanged` 事件，调音量/静音时 `updateVolume` 写回数据库；静音时保留此前音量（Aliplayer 静音会将音量清零，避免覆盖用户设定）；登录用户按用户存库、未登录 fallback 本地存储，图文/视频音量互相跟随
 - **图文中心蒙版动画修复** — 中心指示器加 `z-40`（原无 z-index 被主图 `z-10` 盖住导致不显示，子代理调研确认根因）
 
 - **图片轮播触摸处理** — ImageCarousel 组件（`video-play-section.tsx`）使用与视频播放器一致的原生 `addEventListener` 方式处理触摸事件。React 合成 `onTouchStart` 默认注册为 passive listener，`preventDefault()` 会被浏览器忽略，因此必须使用原生 API + `{ capture: true, passive: false }` 才能阻断 click 事件合成。所有回调通过 ref 访问（`togglePlayRef`、`handleManualSwitchRef`、`currentIndexRef`、`imagesLengthRef`），useEffect 依赖数组为空，避免状态变化导致监听器重建丢失 `lastTap` 时间戳。PC 端 click 处理器始终绑定（不使用 `ontouchstart` 守卫），与视频播放器对齐——移动端通过 `touchstart.preventDefault()` 阻止合成 click，触摸屏笔记本的鼠标和触摸两种输入模式可共存。
 - **中心蒙版图标样式统一** — ImageCarousel 的播放/暂停中心指示器使用与视频播放器 `.bili-anim` 完全一致的 SVG 图标：暂停图标使用 fill 实心 `<rect>`（非 stroke 描边 `<path>`），播放图标使用 fill `<polygon>`，均为 `fill="#fff"`、`viewBox="0 0 24 24"`、尺寸 `40%`（`h-2/5 w-2/5`）。
+- **音量滑块等控件误触发修复** — 音量条弹层（`data-volume-popup`）因控制栏 `overflow-hidden` 被放成控制栏兄弟节点、位于 `data-controlbar` 之外，且容器原生 `pointerdown`/`click`/`dblclick`/`touchstart` 监听无法被 React `stopPropagation` 阻止，四类守卫均未排除滑块，导致：①点击滑块 350ms 延迟后触发播放/暂停反转；②`pointerdown` 时容器 `setPointerCapture` 抢夺滑块指针、破坏 range 原生拖动，拖动 >6px 松手触发 `settleDrag` 轨道切页；③快速双击滑块触发图片缩放（`dblclick` 无控件排除，顺带修复双击模式/全屏按钮也会缩放的问题）；④触摸时 `touchstart` 对滑块 `preventDefault` 破坏 range 触摸拖动。修复：新增统一原生守卫 `isControlTarget(t) = t.closest("button, a, [data-volume-popup], input, select, textarea")`，音量弹层加 `data-volume-popup` 标记，`onPointerDown`/`onClick`/`onMouseDblClick`/`onTouchStart` 四处守卫接入；控制栏空白点击「只切换可见性」原行为保留；删除被覆盖的死代码分支。视频播放器（`video-player.tsx`）本就是 `e.target === player.tag` 白名单监听、键盘调音有 `isEditableTarget` 排除，均无此问题。
 
 ### 未实现功能（不在 MVP 范围）
 - 弹幕系统

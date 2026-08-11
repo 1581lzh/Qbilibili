@@ -6,6 +6,16 @@
 
 ## 已完成工作
 
+### 本次会话（图文播放器音量调节控件暂停/播放误触修复）
+- **`音量条弹层误触修复（关键修复）`** — 修复调节音量时触发播放/暂停、轨道切页、图片缩放三大误触
+  - 根因：音量条弹层为避开控制栏 `overflow-hidden` 裁切被渲染为控制栏兄弟节点，无法被容器原生监听排除；容器上的监听（pointerdown/click/dblclick/touchstart 四类）又无法被 React stopPropagation 阻止（代码注释已承认），音量滑块（`<input type="range">`，非 button/a）落入守卫盲区
+  - 误触一：点击音量滑块 350ms 延迟后 `togglePlay`（播放/暂停反转）——onClick 未排除滑块
+  - 误触二：pointerdown 对滑块执行容器 `setPointerCapture` 抢夺指针破坏 range 原生拖动，拖动 >6px 松手触发 `settleDrag` 轨道切页
+  - 误触三：快速点两下滑块触发 `dblclick` 图片缩放（原生 dblclick 无任何控件排除；顺带也修复了双击播放模式/全屏等控制按钮缩放图片的问题）
+  - 误触四：触摸调节音量时 touchstart 对非 button/a 调 `preventDefault` 破坏 range 触摸拖动
+- **`统一原生守卫 isControlTarget`** — 文件顶部新增 `isControlTarget(t) = closest("button, a, [data-volume-popup], input, select, textarea")`，音量条弹层根 div 加 `data-volume-popup` 标记纳入守卫；onPointerDown 改为 `closest("[data-controlbar]") || isControlTarget(t)` 排除（不再抢指针捕获、不再误触轨道拖动）；onClick 首行加 isControlTarget 排除（控制栏空白点击切换可见性原行为保留）；onMouseDblClick 加 isControlTarget 排除；onTouchStart 的 preventDefault 条件改为 `!isControlTarget(t)`（保护 range 触摸拖动）；删除 onClick 被覆盖的死代码 `closest("button")||closest("a")` 分支（video-play-section.tsx）
+- **`影响范围`** — 视频播放器（video-player.tsx）本身是 `e.target === player.tag` 白名单模式，键盘调音量有 `isEditableTarget` 排除，均无此问题；本次为纯 bug 修复，无 API/数据库变更
+
 ### 本次会话（图文播放器缩放 + 实况切页立即播放 + 移动端返回键重置缩放 + 全屏复位 + 横屏适配）
 - **`图文播放器缩放（上一阶段补记）`** — 纯前端中心缩放（缩放中心为容器中心，不跟随鼠标指针），范围 0.5-5 倍：
   - 交互入口：鼠标滚轮缩放、鼠标双击缩放、触摸双指捏合缩放（`video-play-section.tsx`）、右上角 +/−/重置按钮、键盘 +/−/0 快捷键
