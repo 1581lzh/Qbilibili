@@ -28,11 +28,13 @@
 - **aliyun-upload-sdk 1.5.7** — 阿里云 VOD 上传 SDK（本地 public/lib/ 引入）
 - **ali-oss** — 阿里云 OSS SDK（Node.js 端）
 - **@alicloud/vod20170321** — 阿里云 VOD 服务端 SDK
+- **Cloudflare R2** — 视频/封面云存储（通过 Worker 代理上传，公共读）
+- **Cloudflare Worker** — R2 上传代理（HMAC token 认证，nginx 反代）
 - **ffmpeg-static** — FFmpeg 预编译二进制（音频响度标准化）
 
 ### 部署
 - **Nginx** — Web 服务器 + HTTPS 反向代理
-- **DigiCert 证书** — TLS 1.2/1.3，覆盖 `your-domain.com` + `www.your-domain.com`
+- **Cloudflare Origin CA 证书** — TLS 1.2/1.3，覆盖 `your-domain.com` + `*.your-domain.com`（15年有效）
 - **公网服务器** — 生产环境部署
 
 ## 目录结构
@@ -108,6 +110,7 @@ H:\bilibili/
 │   │   │   ├── image-text-upload.tsx   # 图文投稿组件（左右布局：大预览+瀑布流缩略图+编辑模式；预览窗口与右侧表单等高对齐；上传素材后预览切换固定 3:4 比例顶部对齐不随右栏拉伸）
 │   │   │   └── music-player.tsx        # 音乐播放器组件
 │   │   └── video/             # 视频相关组件
+│   │       ├── infinite-video-grid.tsx  # 首页无限滚动网格（IntersectionObserver + 游标分页）
 │   │       ├── video-card.tsx             # 视频卡片（同名同色头像）
 │   │       ├── video-player.tsx           # 视频播放器（Aliplayer + 空格暂停 + 方向键/A-D 快退快进 5 秒）
 │   │       ├── video-play-section.tsx     # 播放区域（含图片轮播组件：相册式左右平移轨道（鼠标/触摸拖动+循环）、预加载窗口（前后2张图片+实况视频数据）、播放模式切换（循环/单次/自动连播）、底部图片进度条（始终显示，控制栏 0fr↔1fr 水托荷叶动画）、音量控制、中心蒙版动画、PC单击+移动端双击暂停；缩放 0.5-5 倍（滚轮/双击/捏合/按钮/键盘，scale>1 拖动=平移）+ 缩放中暂停自动轮播；移动端系统返回键重置缩放（popstate+pushState 标记）；全屏返回降级/进出复位轨道状态；横屏播放器高度自适应（max-height calc(max(240px,100dvh-5.5rem))）；滑动切换阈值 1/5 页宽；全屏进度条左右收窄 clamp(16px,6vw,48px)；手动切实况图不置 userInteracted 立即播放；实况 canvas 绘制像素总预算 400 万；CollapsibleDescription 描述折叠组件（超 1.5 行折叠：第一行完整+第二行按字符量截断（非垂直腰斩），截断点后同一行接"···"+"展开"按钮，展开后末尾内联"折叠"按钮，Range.getClientRects 行像素测量+二分预留后缀宽度，符号前移截断，resize 重测，切视频按 key 重置））
@@ -122,6 +125,7 @@ H:\bilibili/
 │   │   ├── auth.ts            # NextAuth 配置 + getSession() 安全封装
 │   │   ├── db.ts              # Prisma 客户端
 │   │   ├── oss.ts             # 阿里云 OSS 客户端
+│   │   ├── r2.ts              # Cloudflare R2 客户端 + Worker 上传 token 生成
 │   │   ├── vod.ts             # 阿里云 VOD 客户端（CreateUploadVideo/GetVideoPlayAuth/RefreshUploadVideo）
 │   │   ├── validation.ts      # zod 输入验证 schema（用户名/密码/评论/视频/搜索）
 │   │   ├── csrf.ts            # CSRF 防护（Origin/Referer 校验）
@@ -282,20 +286,19 @@ H:\bilibili/
 - `POST /api/videos/[videoId]/comments/like` — 评论点赞 toggle
 
 ### 文件上传
-- `POST /api/upload` — 上传视频/封面/图片/音乐文件到阿里云 OSS
-  - 视频：最大 500MB，路径 `videos/`（含实况照片视频段）
+- `POST /api/upload` — 上传文件到 Cloudflare R2（通过 Worker 代理）
+  - 流程：服务器生成 HMAC token + Worker URL → 浏览器 PUT 到 Worker → Worker 上传到 R2
+  - 视频：最大 500MB，路径 `videos/`
   - 封面：最大 5MB，路径 `covers/`
   - 图片：最大 15MB，路径 `images/`（支持 jpg/png/gif/webp）
-  - 音乐：最大 50MB，路径 `music/`（支持 mp3/wav/ogg/aac/flac）
+  - 音乐：最大 50MB，路径 `music/`（支持 mp3/wav/ogg/aac/flac/m4a）
 
 ### 图片优化（弱网加载优化）
-- 所有封面图使用 `optimizedCover()` 工具函数（`src/lib/image.ts`）生成优化 URL
-- **OSS 图片**：按需缩放（`x-oss-process=image/resize,w_{width}`）、WebP 格式转换、质量压缩（`quality,q_80`）
-- **picsum.photos 图片**：自动替换 URL 末尾尺寸参数（如 `/1280/720` → `/640/360`），请求 picsum 缩放版本
-- 所有 `<img>` 标签添加 `width`/`height` 属性（消除 CLS）、`loading="lazy"`（懒加载）、`decoding="async"`（异步解码）
-- `layout.tsx` 添加 OSS 域名 `preconnect` + `dns-prefetch`（提前建立连接）
-- 未上传封面时使用本地 `public/placeholder.svg` 占位图（消除外部依赖）
-- 封面宽度：首页/用户页 640px，推荐栏/评论缩略图 400px，管理面板 300px，Aliplayer 播放器封面 1280px
+- 所有封面图使用 `next/image` 组件（`Image`），自动 WebP/AVIF 格式转换 + 响应式 srcset
+- `sizes` 属性按屏幕宽度适配：移动端 50vw，平板 33vw，桌面 25vw/20vw
+- `loading="lazy"` 懒加载 + `decoding="async"` 异步解码
+- `layout.tsx` 添加 R2 域名 `preconnect` + `dns-prefetch`（提前建立连接）
+- 未上传封面时使用本地 `public/placeholder.svg` 占位图
 
 ### 弱网交互优化
 - **乐观更新** — 点赞、收藏、评论、回复、评论点赞全部采用乐观更新策略（点击后立即更新 UI，失败时回滚），弱网下操作响应从 1-3 秒延迟降为 0 延迟
@@ -333,6 +336,14 @@ VOD_REGION=cn-shenzhen
 VOD_ACCESS_KEY_ID=your-access-key-id
 VOD_ACCESS_KEY_SECRET=your-access-key-secret
 VOD_SPACE_NAME=your-space-name
+
+# Cloudflare R2
+R2_ACCOUNT_ID=your-account-id
+R2_ACCESS_KEY_ID=your-access-key-id
+R2_SECRET_ACCESS_KEY=your-secret-access-key
+R2_BUCKET=your-bucket-name
+R2_PUBLIC_URL=https://your-public-url.r2.dev
+UPLOAD_TOKEN_SECRET=your-upload-token-secret
 ```
 
 ## 安全防护
@@ -439,7 +450,7 @@ npm run dev
 3. **配置 Nginx（HTTPS 反向代理）**
 
    证书文件放在 `/etc/nginx/ssl/`：
-   - `your-domain.com.pem` — 全链证书（DigiCert）
+   - `your-domain.com.pem` — Cloudflare Origin CA 证书（15年有效）
    - `your-domain.com.key` — RSA 私钥
 
    配置文件 `/etc/nginx/conf.d/ssl-your-domain.conf`：
@@ -471,6 +482,18 @@ npm run dev
 
        client_max_body_size 50m;
 
+       # R2 Upload Worker 代理
+       location /r2-upload/ {
+           proxy_pass https://r2-upload.your-subdomain.workers.dev/;
+           proxy_ssl_server_name on;
+           proxy_set_header Host r2-upload.your-subdomain.workers.dev;
+           proxy_set_header X-Real-IP $remote_addr;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+           proxy_request_buffering off;
+           client_max_body_size 100m;
+       }
+
        location / {
            proxy_pass http://127.0.0.1:3005;
            proxy_http_version 1.1;
@@ -488,8 +511,7 @@ npm run dev
    > **限流说明**：Next.js 页面刷新会并发发出大量 RSC 请求（首页 + 多个路由），
    > rate 从 10r/s 提升到 50r/s，burst 从 20 提升到 100，避免刷新时 503。
 
-   > **证书限制**：当前证书仅覆盖 `your-domain.com` + `www.your-domain.com`，
-   > 如需其他子域名 HTTPS，需更换为 `*.your-domain.com` 通配符证书。
+   > **证书限制**：当前证书为 Cloudflare Origin CA（15年有效，覆盖 `your-domain.com` + `*.your-domain.com`）。
 
 4. **启动服务**
    ```bash
@@ -558,7 +580,7 @@ sudo firewall-cmd --reload
 ## MVP 功能范围
 
 ### 已实现功能
-1. **首页** — 视频卡片网格布局，同名同色头像
+1. **首页** — 视频卡片网格布局，同名同色头像，无限滚动分批加载（每次20条）
 2. **视频播放页** — 视频播放、点赞、收藏、评论、删除（仅作者）
 3. **视频播放器** — Aliplayer 统一播放所有视频（VOD 鉴权播放 / OSS 直链播放），点击视频区域播放/暂停，播放模式切换（循环/单次/自动连播），模式按用户永久保存到数据库（User.playMode），视频和图文共享同一设置
 4. **自动连播** — 不刷新页面切换视频，ready 事件后自动播放，推荐列表同步更新

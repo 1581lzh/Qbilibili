@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth";
-import oss from "@/lib/oss";
+import { getWorkerUploadUrl, generateR2Key } from "@/lib/r2";
 import { checkRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { requireValidOrigin } from "@/lib/csrf";
-import { Readable } from "node:stream";
 
 export const maxDuration = 300;
 
@@ -89,25 +88,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const uploadType = isMusic ? "music" : isVideo ? "video" : isCover ? "cover" : "image";
     const defaultExt = isMusic ? "mp3" : isVideo ? "mp4" : "png";
     const safeExt = ext || defaultExt;
-    const dir = isMusic ? "music" : isVideo ? "videos" : isCover ? "covers" : "images";
-    const filename = `${dir}/${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${safeExt}`;
+    const key = generateR2Key(uploadType, safeExt);
 
-    // Stream upload for large files (>5MB) to avoid buffering entire file in memory
-    const STREAM_THRESHOLD = 5 * 1024 * 1024;
-    if (file.size > STREAM_THRESHOLD) {
-      const nodeStream = Readable.fromWeb(file.stream() as any);
-      await oss.putStream(filename, nodeStream, {
-        mime: file.type || "application/octet-stream",
-      } as any);
-    } else {
-      const buffer = Buffer.from(await file.arrayBuffer());
-      await oss.put(filename, buffer, { mime: file.type || "application/octet-stream" } as any);
-    }
-
-    const url = oss.generateObjectUrl(filename);
-    return NextResponse.json({ url });
+    const { uploadUrl, publicUrl } = getWorkerUploadUrl(key, file.type || "application/octet-stream");
+    return NextResponse.json({ uploadUrl, url: publicUrl });
   } catch (err) {
     console.error("Upload error:", err);
     return NextResponse.json({ error: "上传失败" }, { status: 500 });

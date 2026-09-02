@@ -63,8 +63,9 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const q = searchParams.get("q")?.trim();
   const limit = Math.min(parseInt(searchParams.get("limit") || "100", 10), 200);
+  const cursor = searchParams.get("cursor");
 
-  const where = q
+  const where: any = q
     ? {
         OR: [
           { title: { contains: q } },
@@ -72,7 +73,9 @@ export async function GET(request: Request) {
           { author: { name: { contains: q } } },
         ],
       }
-    : undefined;
+    : cursor
+      ? { id: { lt: cursor } }
+      : undefined;
 
   const videos = await db.video.findMany({
     where,

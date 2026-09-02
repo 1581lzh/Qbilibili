@@ -2,8 +2,8 @@
 
 import { useMemo } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { motion } from "framer-motion";
-import { optimizedCover } from "@/lib/image";
 import { setAutoPlayVideo } from "@/lib/signals";
 import { avatarColorFor } from "@/lib/avatar";
 import EmojiText from "@/components/ui/emoji-text";
@@ -24,21 +24,22 @@ export default function VideoCard({ video, index = 0 }: { video: Video; index?: 
       className="group block"
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: index * 0.05, ease: "easeOut" }}
+      transition={{ duration: 0.4, delay: (index % 20) * 0.05, ease: "easeOut" }}
     >
       <Link
         href={`/video/${video.id}`}
         onClick={() => setAutoPlayVideo(video.id)}
       >
         <div className="aspect-video overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800">
-          <img
-            src={optimizedCover(video.coverUrl)}
+          <Image
+            src={video.coverUrl}
             alt={video.title}
             width={640}
             height={360}
             loading="lazy"
             decoding="async"
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 20vw"
           />
         </div>
         <div className="mt-2 flex gap-2">

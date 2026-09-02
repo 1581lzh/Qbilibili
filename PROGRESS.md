@@ -6,6 +6,14 @@
 
 ## 已完成工作
 
+### 本次会话（SSL证书修复 + R2 Worker代理上传 + OSS迁移 + next/image + 无限滚动）
+- **`SSL证书修复`** — 源站证书（DigiCert Encryption Everywhere 90天）于 2026-08-13 过期导致 Cloudflare 526 错误；替换为 Cloudflare Origin CA 证书（15年有效，到 2041-08-12），安装到 /etc/nginx/ssl/
+- **`Cloudflare R2 Worker代理上传`** — R2 S3 API (r2.cloudflarestorage.com) 在中国区域 TLS 握手失败，浏览器上传 ERR_SSL_VERSION_OR_CIPHER_MISMATCH；新建 Cloudflare Worker (r2-upload.haol58509.workers.dev) 作为上传代理，nginx 反代 /r2-upload/ → Worker → R2，HMAC-SHA256 token 认证（UPLOAD_TOKEN_SECRET），15分钟有效期
+- **`OSS→R2数据迁移`** — 117个OSS文件通过Worker代理迁移到R2，数据库URL全部更新（OSS→R2），0残留；R2公共域名 pub-eac7cb1048244abfbb60dfa583083e0e.r2.dev
+- **`next/image封面优化`** — video-card.tsx 从 <img> 改为 <Image> (next/image)，自动WebP/AVIF转换+响应式srcset（sizes属性按屏幕宽度适配），next.config.ts添加R2域名白名单
+- **`主页无限滚动`** — 首页SSR直出前20条（take:20），新增InfiniteVideoGrid客户端组件（IntersectionObserver + 400px预加载），API支持cursor游标分页
+- **`同步`** — 待同步至Qbilibili
+
 ### 本次会话（图文播放器音量调节控件暂停/播放误触修复）
 - **`音量条弹层误触修复（关键修复）`** — 修复调节音量时触发播放/暂停、轨道切页、图片缩放三大误触
   - 根因：音量条弹层为避开控制栏 `overflow-hidden` 裁切被渲染为控制栏兄弟节点，无法被容器原生监听排除；容器上的监听（pointerdown/click/dblclick/touchstart 四类）又无法被 React stopPropagation 阻止（代码注释已承认），音量滑块（`<input type="range">`，非 button/a）落入守卫盲区
@@ -226,7 +234,7 @@
 - **个人主页错误处理** — API 返回错误时自动跳转首页，防止 null 数据崩溃
 
 ### Nginx HTTPS 配置（2026-06-26）
-- **SSL 证书部署** — DigiCert 证书（`your-domain.com` + `www.your-domain.com`），TLS 1.2/1.3，存放在 `/etc/nginx/ssl/`
+- **SSL 证书部署** — Cloudflare Origin CA 证书（`your-domain.com` + `*.your-domain.com`，15年有效），TLS 1.2/1.3，存放在 `/etc/nginx/ssl/`
 - **HTTPS 反向代理** — 新增 `/etc/nginx/conf.d/ssl-your-domain.conf`，HTTP 80 → HTTPS 301 跳转，HTTPS 443 + HTTP/2 反代到 :3005
 - **防火墙开放 443** — `firewall-cmd --add-port=443/tcp`
 - **限流调整** — Next.js RSC 并发请求触发 rate limit（10r/s burst=20），提升到 50r/s burst=100

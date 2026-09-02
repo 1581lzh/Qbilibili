@@ -10,6 +10,12 @@ for (const interfaces of Object.values(networkInterfaces())) {
 
 const nextConfig: NextConfig = {
   allowedDevOrigins: [...ips],
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "pub-eac7cb1048244abfbb60dfa583083e0e.r2.dev" },
+      { protocol: "https", hostname: "picsum.photos" },
+    ],
+  },
   headers: async () => [
     {
       source: "/(.*)",

@@ -1,14 +1,17 @@
 import Link from "next/link";
 import { db } from "@/lib/db";
-import VideoCard from "@/components/video/video-card";
+import InfiniteVideoGrid from "@/components/video/infinite-video-grid";
 import { VideoWithAuthor } from "@/types";
 
 export const dynamic = "force-dynamic";
+
+const PAGE_SIZE = 20;
 
 export default async function HomePage() {
   const videos: VideoWithAuthor[] = await db.video.findMany({
     include: { author: { select: { id: true, name: true } }, _count: { select: { likes: true, favorites: true } } },
     orderBy: { createdAt: "desc" },
+    take: PAGE_SIZE,
   });
 
   return (
@@ -21,11 +24,7 @@ export default async function HomePage() {
           暂无视频，<Link href="/upload" className="text-[#FB7299] hover:underline">去投稿</Link>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-2 sm:gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-          {videos.map((video, index) => (
-            <VideoCard key={video.id} video={video} index={index} />
-          ))}
-        </div>
+        <InfiniteVideoGrid initialVideos={videos} />
       )}
     </div>
   );
