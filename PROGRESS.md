@@ -6,6 +6,15 @@
 
 ## 已完成工作
 
+### 本次会话（OSS 完全迁移至 R2）
+- **`OSS 完全移除`** — 音频标准化上传从 OSS 迁移到 R2（`r2.ts` 新增 `uploadBufferToR2()` 直接 S3 上传），删除 `src/lib/oss.ts`、移除 `ali-oss` + `@types/ali-oss` 依赖（减少 55 个包），清理 `.env` 中 OSS 环境变量；数据库中已有的 `normalizedUrl` 仍指向 OSS 的不受影响（OSS bucket 未删除，旧链接仍可访问）
+- **`域名迁移`** — 主域名从旧域名迁移到新域名：
+  - R2 公共访问：使用 R2 桶自定义域 `cdn.your-domain.com`
+  - Worker 上传代理：Worker 自定义域 `upload.your-domain.com`（不再依赖 nginx 反代）
+  - `.env` 新增 `WORKER_URL` 环境变量，`r2.ts` 不再硬编码 Worker URL
+  - `audio-queue.ts` 硬编码域名改用 `NEXTAUTH_URL` 环境变量
+  - 旧域名过期前两个域名均可访问
+
 ### 本次会话（SSL证书修复 + R2 Worker代理上传 + OSS迁移 + next/image + 无限滚动）
 - **`SSL证书修复`** — 源站证书（DigiCert Encryption Everywhere 90天）于 2026-08-13 过期导致 Cloudflare 526 错误；替换为 Cloudflare Origin CA 证书（15年有效，到 2041-08-12），安装到 /etc/nginx/ssl/
 - **`Cloudflare R2 Worker代理上传`** — R2 S3 API (r2.cloudflarestorage.com) 在中国区域 TLS 握手失败，浏览器上传 ERR_SSL_VERSION_OR_CIPHER_MISMATCH；新建 Cloudflare Worker (r2-upload.haol58509.workers.dev) 作为上传代理，nginx 反代 /r2-upload/ → Worker → R2，HMAC-SHA256 token 认证（UPLOAD_TOKEN_SECRET），15分钟有效期

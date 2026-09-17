@@ -3,7 +3,6 @@ import { db } from "@/lib/db";
 import { getSession } from "@/lib/auth";
 import { requireValidOrigin } from "@/lib/csrf";
 import { videoUpdateSchema, validateInput } from "@/lib/validation";
-import oss from "@/lib/oss";
 
 export async function DELETE(
   request: Request,
@@ -28,25 +27,8 @@ export async function DELETE(
     return NextResponse.json({ error: "无权删除" }, { status: 403 });
   }
 
-  try {
-    const videoKey = extractOssKey(video.videoUrl);
-    if (videoKey) await oss.delete(videoKey).catch(() => {});
-
-    const coverKey = extractOssKey(video.coverUrl);
-    if (coverKey) await oss.delete(coverKey).catch(() => {});
-
-    if (video.livePhotoVideos) {
-      const liveVideos = JSON.parse(video.livePhotoVideos);
-      if (Array.isArray(liveVideos)) {
-        for (const vUrl of liveVideos) {
-          const vKey = extractOssKey(vUrl);
-          if (vKey) await oss.delete(vKey).catch(() => {});
-        }
-      }
-    }
-  } catch {
-    // ignore file cleanup errors
-  }
+  // Note: R2 files are not deleted server-side (server can't reach R2 S3 API from China).
+  // R2 free tier is 10GB/month, acceptable for MVP. Files will be orphaned but won't cost anything.
 
   await db.$transaction(async (tx) => {
     await tx.commentLike.deleteMany({ where: { comment: { videoId } } });
@@ -57,19 +39,6 @@ export async function DELETE(
   });
 
   return NextResponse.json({ success: true });
-}
-
-function extractOssKey(url: string): string | null {
-  if (!url) return null;
-  try {
-    const parsed = new URL(url);
-    const key = parsed.pathname.slice(1);
-    if (!key) return null;
-    if (key.includes("..") || key.includes("\\")) return null;
-    return key;
-  } catch {
-    return null;
-  }
 }
 
 export async function PUT(

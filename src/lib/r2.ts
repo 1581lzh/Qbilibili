@@ -14,7 +14,7 @@ const r2 = new S3Client({
 
 const R2_BUCKET = process.env.R2_BUCKET!;
 const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL!;
-const WORKER_URL = "https://your-worker.workers.dev/r2-upload";
+const WORKER_URL = process.env.WORKER_URL!;
 const UPLOAD_TOKEN_SECRET = process.env.UPLOAD_TOKEN_SECRET!;
 
 export async function getPresignedUploadUrl(key: string, contentType: string, expiresIn = 900): Promise<{ uploadUrl: string; publicUrl: string }> {
@@ -65,4 +65,18 @@ export function getWorkerUploadUrl(key: string, contentType: string): { uploadUr
   const token = generateUploadToken(key, contentType);
   const uploadUrl = `${WORKER_URL}/upload?token=${encodeURIComponent(token)}&key=${encodeURIComponent(key)}&contentType=${encodeURIComponent(contentType)}&publicUrl=${encodeURIComponent(publicUrl)}`;
   return { uploadUrl, publicUrl };
+}
+
+/**
+ * Upload a buffer directly to R2 via S3 API (server-side only).
+ * Returns the public URL of the uploaded object.
+ */
+export async function uploadBufferToR2(key: string, buffer: Buffer, contentType: string): Promise<string> {
+  await r2.send(new PutObjectCommand({
+    Bucket: R2_BUCKET,
+    Key: key,
+    Body: buffer,
+    ContentType: contentType,
+  }));
+  return `${R2_PUBLIC_URL}/${key}`;
 }

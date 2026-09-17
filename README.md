@@ -7,14 +7,14 @@
 - 首页视频卡片网格布局
 - 首页无限滚动加载（每次20条，滚动到底自动加载下一批）
 - 封面图 next/image 优化（自动WebP/AVIF转换 + 响应式srcset）
-- Cloudflare R2 云存储（Worker代理上传，HMAC token认证）
+- Cloudflare R2 云存储（Worker代理上传，HMAC token认证，自定义域 `upload.your-domain.com`）
 - 视频播放（Aliplayer 统一播放，循环/单次/自动连播三种模式，按用户永久保存到数据库）
 - 视频切换（上一个/下一个，PlaylistComponent 原生按钮）
 - 键盘快捷键（方向键快退/快进 5 秒，A/D 键同效；评论/搜索输入时自动解除控制，中文输入法组合键不误触；空格播放/暂停）
 - 点击视频封面自动非静音播放
 - 播放/暂停中心弹性动画
 - 内容描述折叠（播放页描述超过 1.5 行时折叠：第一行完整 + 第二行按字符量在"···"处截断（非垂直腰斩），截断点后同一行显示"展开"按钮，展开后末尾"折叠"按钮；视频和图文类型共用）
-- 上传视频到阿里云 VOD（自动回退 OSS）
+- 上传视频到阿里云 VOD（自动回退 R2）
 - 投稿页表单布局（视频/图文投稿左侧预览窗口与右侧表单等高对齐；上传素材后预览左固定 3:4 比例顶部对齐，不被右侧内容拉长；视频投稿表单顺序：标题→简介→视频文件→封面图，与图文投稿一致）
 - 阿里云 VOD 视频点播对接（服务端鉴权 + 客户端 SDK 上传 + 鉴权播放；上传进度按 loaded/total 真实计算，视频/图文投稿统一直接调用 handleSubmit 提交）
 - 图文投稿左右布局（大预览+瀑布流缩略图+编辑模式+设置封面+多音频支持+图片预览时长设置，客户端压缩）
@@ -55,9 +55,9 @@
 - 评论粘贴净化（从其他网页复制的文字粘贴进评论区只保留纯文本，丢弃源页面内联样式与 HTML 标签，图片/GIF/图片URL 粘贴不受影响）
 - 会话安全（JWT 7天有效期、密码修改后旧会话自动失效、已删除用户token撤销）
 - 数据一致性保障（关键删除操作使用事务，级联删除完整）
-- 封面图片懒加载 + OSS图片处理（按需缩放+WebP格式转换+质量压缩）
+- 封面图片懒加载 + R2 图片直链
 - 弱网图片加载优化（预连接、尺寸属性、异步解码、本地占位图、picsum缩放）
-- OSS URL 自动升级 HTTPS（消除 Mixed Content 警告）
+- R2 URL 自动升级 HTTPS（消除 Mixed Content 警告）
 - 弱网交互优化（乐观更新即时响应、页面骨架屏、代码分割、播放器预加载、API缓存头、客户端fetch缓存）
 - 音频响度标准化（FFmpeg loudnorm 两次通过，-14 LUFS 流媒体标准，精度 ±0.5 LU，上传后自动统一音量，支持视频和图文所有类型，播放器优先使用标准化音频，非阻塞播放，管理面板可一键重新标准化+实时进度追踪）
 - 输入框滚动条适配深色模式（评论区/标题/简介/搜索框）
@@ -76,7 +76,7 @@
 | NextAuth.js v5 | 用户认证 |
 | Framer Motion | 页面/列表/微交互动画 |
 | zod | 输入验证 |
-| 阿里云 OSS | 视频/封面存储 |
+| Cloudflare R2 | 视频/封面存储 |
 | 阿里云 VOD | 视频点播（鉴权上传 + 鉴权播放） |
 | Aliplayer 2.25.1 | 统一视频播放器 |
 | Cloudflare R2 | 视频/封面云存储 |
@@ -186,18 +186,6 @@ server {
 
     client_max_body_size 50m;
 
-    # R2 Upload Worker 代理
-    location /r2-upload/ {
-        proxy_pass https://r2-upload.your-subdomain.workers.dev/;
-        proxy_ssl_server_name on;
-        proxy_set_header Host r2-upload.your-subdomain.workers.dev;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_request_buffering off;
-        client_max_body_size 100m;
-    }
-
     location / {
         proxy_pass http://127.0.0.1:3005;
         proxy_http_version 1.1;
@@ -212,10 +200,12 @@ server {
 }
 ```
 
+> **R2 上传**：浏览器直接通过 Worker 自定义域 `upload.your-domain.com` 上传，不需要 nginx 反代。
+> **R2 公共访问**：通过 R2 自定义域 `cdn.your-domain.com` 访问。
+>
 > **限流说明**：Next.js 页面刷新会并发发出大量 RSC 请求，rate=50r/s burst=100 可避免 503。
 >
 > **证书**：当前使用 Cloudflare Origin CA 证书覆盖 `your-domain.com` + `*.your-domain.com`（15年有效），存放在 `/etc/nginx/ssl/`。
-> 如需子域名 HTTPS 需更换通配符证书。
 
 ## systemd 服务部署（CentOS/Linux）
 
@@ -258,27 +248,22 @@ sudo journalctl -u bilibili -f
 
 ```env
 DATABASE_URL="file:./dev.db"
-NEXTAUTH_URL="http://localhost:3005"
+NEXTAUTH_URL="https://your-domain.com"
 NEXTAUTH_SECRET="your-secret-key-here"
 
-# 阿里云 OSS（可选，不配置则使用示例图片）
-OSS_REGION=oss-cn-guangzhou
-OSS_ACCESS_KEY_ID=your-access-key-id
-OSS_ACCESS_KEY_SECRET=your-access-key-secret
-OSS_BUCKET=your-bucket-name
-
-# 阿里云 VOD（可选，不配置则视频走 OSS 存储）
+# 阿里云 VOD（可选，不配置则视频走 R2 存储）
 VOD_REGION=cn-shenzhen
 VOD_ACCESS_KEY_ID=your-access-key-id
 VOD_ACCESS_KEY_SECRET=your-access-key-secret
 VOD_SPACE_NAME=your-space-name
 
-# Cloudflare R2（可选，不配置则使用阿里云 OSS）
+# Cloudflare R2（可选，不配置则使用示例图片）
 R2_ACCOUNT_ID=your-account-id
 R2_ACCESS_KEY_ID=your-access-key-id
 R2_SECRET_ACCESS_KEY=your-secret-access-key
 R2_BUCKET=your-bucket-name
-R2_PUBLIC_URL=https://your-public-url.r2.dev
+R2_PUBLIC_URL=https://cdn.your-domain.com
+WORKER_URL=https://upload.your-domain.com
 UPLOAD_TOKEN_SECRET=your-upload-token-secret
 ```
 

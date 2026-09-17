@@ -19,7 +19,7 @@ Bilibili 风格视频平台 MVP，一天内通过自然语言描述完成最小�
 - **UI**: Tailwind CSS v4 + shadcn/ui
 - **数据库**: SQLite (Prisma ORM)
 - **认证**: NextAuth.js v5
-- **视频存储**: 阿里云 OSS + 阿里云 VOD
+- **视频存储**: Cloudflare R2 + 阿里云 VOD
 
 ## 项目规则
 
@@ -264,7 +264,7 @@ H:\bilibili/
 │   ├── lib/
 │   │   ├── auth.ts                  # NextAuth 配置 + getSession()
 │   │   ├── db.ts                    # Prisma 客户端
-│   │   ├── oss.ts                   # 阿里云 OSS 客户端
+│   │   ├── r2.ts                    # Cloudflare R2 客户端（S3 API + Worker 代理上传）
 │   │   ├── vod.ts                   # 阿里云 VOD 服务端封装
 │   │   ├── password.ts              # 密码哈希工具（bcryptjs）
 │   │   ├── image.ts                 # 图片/URL 优化工具（toHttps + OSS/picsum 图片处理参数生成）
@@ -454,7 +454,6 @@ npx prisma db push
 
 ### 类型相关
 
-- `ali-oss` 缺少内置 TypeScript 类型，需要安装 `@types/ali-oss`
 - 组件间传递日期字段时，类型应设为 `Date | string` 以兼容 JSON 序列化
 
 ### 阿里云 SDK 相关

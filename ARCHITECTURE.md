@@ -22,20 +22,20 @@
 - **@auth/prisma-adapter** — Prisma 认证适配器
 
 ### 视频服务
-- **阿里云 OSS** — 视频/封面云存储（Bucket: your-bucket，公共读）
 - **阿里云 VOD** — 视频点播服务（Region: cn-shenzhen，Space: your-space-name）
 - **Aliplayer 2.25.1** — 阿里云播放器 SDK（CDN 引入，统一所有视频播放）
 - **aliyun-upload-sdk 1.5.7** — 阿里云 VOD 上传 SDK（本地 public/lib/ 引入）
-- **ali-oss** — 阿里云 OSS SDK（Node.js 端）
 - **@alicloud/vod20170321** — 阿里云 VOD 服务端 SDK
-- **Cloudflare R2** — 视频/封面云存储（通过 Worker 代理上传，公共读）
-- **Cloudflare Worker** — R2 上传代理（HMAC token 认证，nginx 反代）
+- **Cloudflare R2** — 视频/封面云存储（S3 API 直传 + Worker 代理上传，公共读）
+- **Cloudflare Worker** — R2 上传代理（HMAC token 认证，自定义域 `upload.your-domain.com`）
 - **ffmpeg-static** — FFmpeg 预编译二进制（音频响度标准化）
 
 ### 部署
 - **Nginx** — Web 服务器 + HTTPS 反向代理
 - **Cloudflare Origin CA 证书** — TLS 1.2/1.3，覆盖 `your-domain.com` + `*.your-domain.com`（15年有效）
 - **公网服务器** — 生产环境部署
+- **Cloudflare R2 自定义域** — `cdn.your-domain.com`（R2 公共访问）
+- **Cloudflare Worker 自定义域** — `upload.your-domain.com`（R2 上传代理）
 
 ## 目录结构
 
@@ -86,7 +86,7 @@ H:\bilibili/
 │   │       │       │   └── like/       # 评论点赞 API
 │   │       │       ├── like/           # 视频点赞 API
 │   │       │       └── favorite/       # 视频收藏 API
-│   │       ├── upload/        # 文件上传 API（OSS）
+│   │       ├── upload/        # 文件上传 API（R2）
 │   │       ├── vod/           # VOD 视频点播 API（create/refresh/playAuth）
 │   │       └── audio/         # 音频处理 API
 │   │           ├── re-normalize/ # 重新标准化所有已标准化的音频（-14 LUFS）
@@ -124,8 +124,7 @@ H:\bilibili/
 │   ├── lib/                   # 工具函数
 │   │   ├── auth.ts            # NextAuth 配置 + getSession() 安全封装
 │   │   ├── db.ts              # Prisma 客户端
-│   │   ├── oss.ts             # 阿里云 OSS 客户端
-│   │   ├── r2.ts              # Cloudflare R2 客户端 + Worker 上传 token 生成
+│   │   ├── r2.ts              # Cloudflare R2 客户端（S3 API 直传 + Worker 代理上传）
 │   │   ├── vod.ts             # 阿里云 VOD 客户端（CreateUploadVideo/GetVideoPlayAuth/RefreshUploadVideo）
 │   │   ├── validation.ts      # zod 输入验证 schema（用户名/密码/评论/视频/搜索）
 │   │   ├── csrf.ts            # CSRF 防护（Origin/Referer 校验）
@@ -198,8 +197,8 @@ H:\bilibili/
 - `id`: 主键 (CUID)
 - `title`: 标题
 - `description`: 描述
-- `coverUrl`: 封面图 URL（OSS，图文投稿时使用用户选择的封面或第一张图片）
-- `videoUrl`: 视频 URL（OSS，图文投稿时为空）
+- `coverUrl`: 封面图 URL（R2，图文投稿时使用用户选择的封面或第一张图片）
+- `videoUrl`: 视频 URL（R2，图文投稿时为空）
 - `vodVideoId`: VOD 视频 ID（可选，用于鉴权播放）
 - `duration`: 时长（秒）
 - `views`: 播放次数
@@ -274,7 +273,7 @@ H:\bilibili/
 - `GET /api/videos?q=` — 获取视频列表（支持搜索）
 - `POST /api/videos` — 投稿（写入数据库）
 - `PUT /api/videos/[videoId]` — 更新视频（仅作者，支持修改标题、描述、封面、图片顺序、实况视频配对、轮播时长）
-- `DELETE /api/videos/[videoId]` — 删除视频（仅作者，清理 OSS 文件和关联数据）
+- `DELETE /api/videos/[videoId]` — 删除视频（仅作者，清理关联数据；R2 文件不删除，免费额度可接受）
 - `GET /api/videos/[videoId]/detail` — 获取视频详情（含 nextVideoId、likeCount、favoriteCount、liked、favorited，用于自动连播和切换视频后状态同步）
 - `GET /api/videos/recommendations` — 获取推荐列表
 - `POST /api/videos/[videoId]/like` — 视频点赞 toggle
@@ -287,7 +286,7 @@ H:\bilibili/
 
 ### 文件上传
 - `POST /api/upload` — 上传文件到 Cloudflare R2（通过 Worker 代理）
-  - 流程：服务器生成 HMAC token + Worker URL → 浏览器 PUT 到 Worker → Worker 上传到 R2
+  - 流程：服务器生成 HMAC token + Worker URL → 浏览器 PUT 到 Worker（`upload.your-domain.com`）→ Worker 上传到 R2
   - 视频：最大 500MB，路径 `videos/`
   - 封面：最大 5MB，路径 `covers/`
   - 图片：最大 15MB，路径 `images/`（支持 jpg/png/gif/webp）
@@ -322,14 +321,8 @@ H:\bilibili/
 DATABASE_URL="file:./dev.db"
 
 # NextAuth
-NEXTAUTH_URL="http://localhost:3005"
+NEXTAUTH_URL="https://your-domain.com"
 NEXTAUTH_SECRET="your-secret-key-here-change-in-production"
-
-# 阿里云 OSS
-OSS_REGION=oss-cn-guangzhou
-OSS_ACCESS_KEY_ID=your-access-key-id
-OSS_ACCESS_KEY_SECRET=your-access-key-secret
-OSS_BUCKET=your-bucket-name
 
 # 阿里云 VOD
 VOD_REGION=cn-shenzhen
@@ -342,7 +335,8 @@ R2_ACCOUNT_ID=your-account-id
 R2_ACCESS_KEY_ID=your-access-key-id
 R2_SECRET_ACCESS_KEY=your-secret-access-key
 R2_BUCKET=your-bucket-name
-R2_PUBLIC_URL=https://your-public-url.r2.dev
+R2_PUBLIC_URL=https://cdn.your-domain.com
+WORKER_URL=https://upload.your-domain.com
 UPLOAD_TOKEN_SECRET=your-upload-token-secret
 ```
 
@@ -421,7 +415,7 @@ UPLOAD_TOKEN_SECRET=your-upload-token-secret
 ## 路径穿越防护
 - 文件上传：文件名由服务端生成，不使用原始文件名
 - 投稿 URL：zod 验证拒绝含 `..` 或 `\` 的 URL
-- OSS 删除：`extractOssKey` 函数过滤 `..` 和 `\` 字符
+- R2 删除：`extractR2Key` 函数过滤 `..` 和 `\` 字符
 
 ### 开发环境
 ```bash
@@ -445,7 +439,7 @@ npm run dev
    - 上传 `.next` 文件夹
    - 上传 `node_modules` 文件夹
    - 上传 `prisma/dev.db` 数据库文件
-   - 视频/封面存储在阿里云 OSS，无需上传
+   - 视频/封面存储在 Cloudflare R2，无需上传
 
 3. **配置 Nginx（HTTPS 反向代理）**
 
@@ -453,60 +447,51 @@ npm run dev
    - `your-domain.com.pem` — Cloudflare Origin CA 证书（15年有效）
    - `your-domain.com.key` — RSA 私钥
 
-   配置文件 `/etc/nginx/conf.d/ssl-your-domain.conf`：
-   ```nginx
-   limit_req_zone $binary_remote_addr zone=api:10m rate=50r/s;
+    配置文件 `/etc/nginx/conf.d/ssl-your-domain.conf`：
+    ```nginx
+    limit_req_zone $binary_remote_addr zone=api:10m rate=50r/s;
 
-   # HTTP → HTTPS 跳转
-   server {
-       listen 80;
-       listen [::]:80;
-       server_name your-domain.com *.your-domain.com;
-       location / {
-           return 301 https://$host$request_uri;
-       }
-   }
+    # HTTP → HTTPS 跳转
+    server {
+        listen 80;
+        listen [::]:80;
+        server_name your-domain.com *.your-domain.com;
+        location / {
+            return 301 https://$host$request_uri;
+        }
+    }
 
-   # HTTPS 主站
-   server {
-       listen 443 ssl;
-       listen [::]:443 ssl;
-       http2 on;
-       server_name your-domain.com *.your-domain.com;
+    # HTTPS 主站
+    server {
+        listen 443 ssl;
+        listen [::]:443 ssl;
+        http2 on;
+        server_name your-domain.com *.your-domain.com;
 
-       ssl_certificate     /etc/nginx/ssl/your-domain.com.pem;
-       ssl_certificate_key /etc/nginx/ssl/your-domain.com.key;
-       ssl_protocols TLSv1.2 TLSv1.3;
-       ssl_session_cache shared:SSL:10m;
-       ssl_session_tickets off;
+        ssl_certificate     /etc/nginx/ssl/your-domain.com.pem;
+        ssl_certificate_key /etc/nginx/ssl/your-domain.com.key;
+        ssl_protocols TLSv1.2 TLSv1.3;
+        ssl_session_cache shared:SSL:10m;
+        ssl_session_tickets off;
 
-       client_max_body_size 50m;
+        client_max_body_size 50m;
 
-       # R2 Upload Worker 代理
-       location /r2-upload/ {
-           proxy_pass https://r2-upload.your-subdomain.workers.dev/;
-           proxy_ssl_server_name on;
-           proxy_set_header Host r2-upload.your-subdomain.workers.dev;
-           proxy_set_header X-Real-IP $remote_addr;
-           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-           proxy_set_header X-Forwarded-Proto $scheme;
-           proxy_request_buffering off;
-           client_max_body_size 100m;
-       }
+        location / {
+            proxy_pass http://127.0.0.1:3005;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection 'upgrade';
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            limit_req zone=api burst=100 nodelay;
+        }
+    }
+    ```
 
-       location / {
-           proxy_pass http://127.0.0.1:3005;
-           proxy_http_version 1.1;
-           proxy_set_header Upgrade $http_upgrade;
-           proxy_set_header Connection 'upgrade';
-           proxy_set_header Host $host;
-           proxy_set_header X-Real-IP $remote_addr;
-           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-           proxy_set_header X-Forwarded-Proto $scheme;
-           limit_req zone=api burst=100 nodelay;
-       }
-   }
-   ```
+    > **R2 上传**：浏览器直接通过 Worker 自定义域 `upload.your-domain.com` 上传，不再需要 nginx 反代 Worker。
+    > **R2 公共访问**：通过 R2 自定义域 `cdn.your-domain.com` 访问，不再使用默认 `*.r2.dev` 域名。
 
    > **限流说明**：Next.js 页面刷新会并发发出大量 RSC 请求（首页 + 多个路由），
    > rate 从 10r/s 提升到 50r/s，burst 从 20 提升到 100，避免刷新时 503。
@@ -560,8 +545,8 @@ sudo firewall-cmd --reload
 - `@tailwindcss/postcss@4.1.4` (dev) — PostCSS 插件
 
 ### 云存储
-- `ali-oss` — 阿里云 OSS SDK（Node.js 端）
-- `@types/ali-oss` (dev) — TypeScript 类型
+- `@aws-sdk/client-s3` — Cloudflare R2 S3 客户端（Node.js 端直传）
+- `@aws-sdk/s3-request-presigner` — S3 预签名 URL 生成
 - `@alicloud/vod20170321` — 阿里云 VOD 服务端 SDK
 - `@alicloud/openapi-core` — 阿里云 OpenAPI 核心库
 - `@alicloud/tea-util` — 阿里云 Tea 工具库
@@ -582,9 +567,9 @@ sudo firewall-cmd --reload
 ### 已实现功能
 1. **首页** — 视频卡片网格布局，同名同色头像，无限滚动分批加载（每次20条）
 2. **视频播放页** — 视频播放、点赞、收藏、评论、删除（仅作者）
-3. **视频播放器** — Aliplayer 统一播放所有视频（VOD 鉴权播放 / OSS 直链播放），点击视频区域播放/暂停，播放模式切换（循环/单次/自动连播），模式按用户永久保存到数据库（User.playMode），视频和图文共享同一设置
+3. **视频播放器** — Aliplayer 统一播放所有视频（VOD 鉴权播放 / R2 直链播放），点击视频区域播放/暂停，播放模式切换（循环/单次/自动连播），模式按用户永久保存到数据库（User.playMode），视频和图文共享同一设置
 4. **自动连播** — 不刷新页面切换视频，ready 事件后自动播放，推荐列表同步更新
-5. **上传页** — VOD 上传（通过 aliyun-upload-sdk 直传 VOD），失败自动回退 OSS；支持粘贴/拖拽、文件预览、上传进度条；视频/图文投稿统一直接调用 `handleSubmit` 提交（避免 `document.querySelector("form")` 误触 Header 搜索表单）
+5. **上传页** — VOD 上传（通过 aliyun-upload-sdk 直传 VOD），失败自动回退 R2；支持粘贴/拖拽、文件预览、上传进度条；视频/图文投稿统一直接调用 `handleSubmit` 提交（避免 `document.querySelector("form")` 误触 Header 搜索表单）
 6. **图文投稿** — 支持多张图片（最多40张）和可选背景音乐上传，图片预览轮播+缩略图导航（拖拽排序+封面选择），客户端压缩（Canvas API），进度百分比显示整数
 7. **个人主页** — 账号设置、我的投稿（可删除）、收藏列表、点赞列表（含视频/评论/获赞三个子分类）、我的评论
 8. **用户系统** — 注册/登录，改名后 Header 实时同步
@@ -615,14 +600,14 @@ sudo firewall-cmd --reload
 33. **毛玻璃效果** — 下拉菜单 `backdrop-blur-xl` 直接模糊页面内容，弹窗遮罩分离模糊层与内容层（blur 静态 + opacity GPU 动画）
 34. **评论图片附件** — 每条评论最多 7 张图片，文字可选；单图等比显示，多图 1:1 正方形缩略图网格（移动端 3 列 / PC 5 列，均带溢出 "+N" 小标）；全屏灯箱查看（相册式三页轨道滑动切换、缩放 0.5-5 倍、鼠标原生 dblclick 双击缩放、系统返回键关闭）
 35. **图文播放优化** — 播放/暂停图标正确显示（暂停显示▶，播放显示⏸）；浏览器阻止自动播放时自动降级到暂停状态，用户交互后恢复
-36. **音频响度标准化** — 上传视频后自动使用 FFmpeg loudnorm（EBU R128，-14 LUFS）标准化音频响度，支持 OSS 和 VOD 两种视频来源，异步队列处理，非阻塞播放；启动时自动回填未处理的旧视频
+36. **音频响度标准化** — 上传视频后自动使用 FFmpeg loudnorm（EBU R128，-14 LUFS）标准化音频响度，支持 R2 和 VOD 两种视频来源，异步队列处理，非阻塞播放；启动时自动回填未处理的旧视频
 37. **Emoji 支持** — 评论/投稿支持 Unicode emoji 和抖音表情包，emoji 选择器面板（分类浏览 + 搜索），contentEditable 实时预览 emoji 图片，抖音表情包 214 个（存储在 public/emoji/douyin/），B站格式兼容（`:表情名:`语法）
 38. **实况照片（Live Photo）支持** — 图文投稿支持实况照片，播放时像抖音一样自动静音播放实况视频，播完继续轮播
   - **多格式解析**（`src/lib/live-photo.ts`）：
     - Android Motion Photo：单文件 JPEG 内嵌 MP4，用 `motion-photo` 的 `MotionPhotoParser` 解析（XMP 元数据 + ftyp 回退）
     - Apple .livp 压缩包：用 `jszip` 解包提取图片+视频
     - Apple 分离格式（HEIC + MOV）：用 `heic-normalize` 将 HEIC 转 JPEG（Safari 原生解码 + WASM 兜底），按文件名自动配对（如 `IMG_1234.HEIC` + `IMG_1234.MOV`），选择顺序无关
-  - **存储**：Video 表新增 `livePhotoVideos` 字段（JSON 数组，与 imageUrls 一一对应，`""` 表示静态图），实况视频段以 video 类型上传 OSS
+  - **存储**：Video 表新增 `livePhotoVideos` 字段（JSON 数组，与 imageUrls 一一对应，`""` 表示静态图），实况视频段以 video 类型上传 R2
   - **播放**：轮播到实况图自动静音播放视频，对应进度条一节显示视频实时进度（timeupdate 驱动，非倒计时）；视频完整播完后再切下一张，融入轮播节奏；背景音乐保持正常播放（仅视频静音）
   - **播放阶段机**：实况图播放流程为 `static-preview（1s封面）→ live-fade-in（交叉淡化）→ 视频播放 → live-fade-out（交叉淡化）→ static-preview（1s封面）→ 循环`。用链式定时器 + epoch 守卫推进；单图 loop 用 `liveRestartTick` 信号触发重播（currentIndex 不变时 React 不重渲染）；实况结束用 React 原生 `onEnded` 绑定
   - **渲染实现（单 canvas 像素级混合）**：真 `<video>` `opacity:0` + `absolute inset-0` 隐藏仅作帧源（继续硬件解码、驱动 `onEnded`/进度条/首帧），新增 `<canvas>` `absolute inset-0` 用 `requestAnimationFrame` 逐帧 `drawImage` 镜像视频；同一画布里用 `globalAlpha` 同时绘制「封面帧（`1-fade`）+ 实况帧（`fade`）」实现像素级半透明交叉淡化，不依赖任何元素层叠关系。封面 `<img>` 常驻渲染并置于 canvas 下方（`z-11` < canvas `z-12`），作为 canvas 首帧绘制前的无缝底衬（消除淡入空档闪烁）；封面帧用 `Image` 对象绘制（同 URL 走缓存），`drawImage` 按 `object-contain` 等比缩放居中（`Math.min`）。淡入淡出用 `easeInOutQuad` 缓动（`liveFadeRef` + `fadeAnimRef`），首帧 `loadeddata` 后再淡入、1.5s 兜底防卡死。**踩坑记录**：canvas 必须用 `absolute inset-0`（`relative` 不脱离文档流会被挤到容器外裁掉）；Edge 下 `opacity:0` 的独立合成层（`will-change` 等）仍会遮挡下方内容，故不可依赖封面 img 层叠做淡化。详细分析见 [CROSSFADE-ISSUE.md](./CROSSFADE-ISSUE.md)

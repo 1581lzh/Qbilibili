@@ -1,7 +1,7 @@
 import { db } from "./db";
 import { normalizeAudioFromUrl } from "./audio-normalize";
 import { getVodPlayUrl } from "./vod";
-import client from "./oss";
+import { uploadBufferToR2 } from "./r2";
 
 const PROGRESS_ID = "singleton";
 const MAX_RETRIES = 2;
@@ -120,7 +120,7 @@ async function processItem(item: QueueItem): Promise<void> {
 
     // Fix local paths: convert /uploads/... to full URL
     if (videoUrl && videoUrl.startsWith("/")) {
-      videoUrl = `${process.env.NEXTAUTH_URL || "http://localhost:3005"}${videoUrl}`;
+      videoUrl = `${process.env.NEXTAUTH_URL}${videoUrl}`;
     }
 
     if (!videoUrl && video.vodVideoId) {
@@ -152,11 +152,13 @@ async function processItem(item: QueueItem): Promise<void> {
     const result = await normalizeAudioFromUrl(videoUrl);
     if (result.success && result.outputBuffer) {
       const isImageText = video.postType === "image_text";
-      const normalizedKey = isImageText ? `music/normalized_${video.id}.m4a` : `videos/normalized_${video.id}.mp4`;
+      const ext = isImageText ? "m4a" : "mp4";
       const contentType = isImageText ? "audio/mp4" : "video/mp4";
-      const ossResult = await client.put(normalizedKey, result.outputBuffer, { headers: { "Content-Type": contentType } });
+      const dir = isImageText ? "music" : "videos";
+      const normalizedKey = `${dir}/normalized_${video.id}.${ext}`;
+      const publicUrl = await uploadBufferToR2(normalizedKey, result.outputBuffer, contentType);
 
-      await db.video.update({ where: { id: video.id }, data: { audioNormalized: true, normalizedUrl: ossResult.url } });
+      await db.video.update({ where: { id: video.id }, data: { audioNormalized: true, normalizedUrl: publicUrl } });
 
       console.log(`[AudioQueue] Successfully normalized video ${video.id}`);
       state.queue.delete(item.videoId);
