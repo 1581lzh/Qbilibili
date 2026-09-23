@@ -6,6 +6,11 @@
 
 ## 已完成工作
 
+### 本次会话（首页分页加载入场动画不统一修复）
+- **`根因`** — 首页无限滚动分页追加的每批 20 条卡片都会重新播一遍入场动画（淡入+上移，延迟按 `index % 20 * 0.05` 计算，末条要等约 1 秒），快速下滑时已滑到眼前的卡片还在半透明飘入、旁边卡片却是实心的，新旧动画混杂导致视觉不统一
+- **`修复`** — `video-card.tsx` 新增 `animate` 属性（默认 true 保持其他页面原行为）：false 时 `initial=false` 不播入场动画；`infinite-video-grid.tsx` 用 `initialCount` 记录首屏条数，`animate={index < initialCount}` 只让首屏那一批播 staggered 入场，分页追加的卡片直接以正常状态显示（同步自主项目 207c341）
+- **`测试`** — `tsc --noEmit` 通过（本项目无独立 systemd 服务，仅做静态验证）
+
 ### 本次会话（OSS 完全迁移至 R2）
 - **`OSS 完全移除`** — 音频标准化上传从 OSS 迁移到 R2（`r2.ts` 新增 `uploadBufferToR2()` 直接 S3 上传），删除 `src/lib/oss.ts`、移除 `ali-oss` + `@types/ali-oss` 依赖（减少 55 个包），清理 `.env` 中 OSS 环境变量；数据库中已有的 `normalizedUrl` 仍指向 OSS 的不受影响（OSS bucket 未删除，旧链接仍可访问）
 - **`域名迁移`** — 主域名从旧域名迁移到新域名：

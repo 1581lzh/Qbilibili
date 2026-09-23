@@ -16,15 +16,23 @@ interface Video {
   _count: { likes: number; favorites: number };
 }
 
-export default function VideoCard({ video, index = 0 }: { video: Video; index?: number }) {
+export default function VideoCard({
+  video,
+  index = 0,
+  animate = true,
+}: {
+  video: Video;
+  index?: number;
+  animate?: boolean;
+}) {
   const avatarColor = useMemo(() => avatarColorFor(video.author.name), [video.author.name]);
 
   return (
     <motion.div
       className="group block"
-      initial={{ opacity: 0, y: 20 }}
+      initial={animate ? { opacity: 0, y: 20 } : false}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, delay: (index % 20) * 0.05, ease: "easeOut" }}
+      transition={{ duration: 0.4, delay: animate ? (index % 20) * 0.05 : 0, ease: "easeOut" }}
     >
       <Link
         href={`/video/${video.id}`}
