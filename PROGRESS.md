@@ -6,6 +6,13 @@
 
 ## 已完成工作
 
+### 本次会话（封面 400 修复：域名迁移后 next/image 白名单遗漏新域名，同步自主项目 896f40c）
+- **`现象`** — 迁移后上传的图文封面走 `/_next/image` 图片优化代理时返回 400 (Bad Request)，封面加载不出来（图片直连本身正常）；主项目中具体表现为标题「像风里的恍惚和叹息」的图文封面
+- **`根因`** — 域名迁移提交把 `.env` 的 `R2_PUBLIC_URL` 改为新图片域名，但没把新域名加进 `next.config.ts` 的 `images.remotePatterns`（白名单里只有迁移前的 `pub-...r2.dev` 和 `picsum.photos`）。图片直连访问正常（200），但前端 `<Image>` 走 `/_next/image` 优化代理时被白名单拦截返回 400；迁移前的历史封面用旧域名不受影响
+- **`修复`** — `next.config.ts` `remotePatterns` 新增图片域名条目（本项目为脱敏版，按占位约定写 `cdn.your-domain.com` + 注释「部署时替换为实际图片域名」，保留旧域名兼容历史数据）；`layout.tsx` **不加**任何 R2/CDN 域名 `preconnect`（本版原本连旧域名预连接都没有，占位域名预连接无意义，仅在文档层面说明部署时自行添加）
+- **`测试`** — `npx tsc --noEmit` 源码 0 错误（静态验证；本项目无独立 systemd 服务，不做运行时验证）
+- **`经验`** — 更换图片域名时需同步三处：`.env` 的 `R2_PUBLIC_URL`、`next.config.ts` 的 `images.remotePatterns`、`layout.tsx` 的 `preconnect`
+
 ### 本次会话（首页分页加载入场动画不统一修复）
 - **`根因`** — 首页无限滚动分页追加的每批 20 条卡片都会重新播一遍入场动画（淡入+上移，延迟按 `index % 20 * 0.05` 计算，末条要等约 1 秒），快速下滑时已滑到眼前的卡片还在半透明飘入、旁边卡片却是实心的，新旧动画混杂导致视觉不统一
 - **`修复`** — `video-card.tsx` 新增 `animate` 属性（默认 true 保持其他页面原行为）：false 时 `initial=false` 不播入场动画；`infinite-video-grid.tsx` 用 `initialCount` 记录首屏条数，`animate={index < initialCount}` 只让首屏那一批播 staggered 入场，分页追加的卡片直接以正常状态显示（同步自主项目 207c341）

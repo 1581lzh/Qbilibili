@@ -294,9 +294,10 @@ H:\bilibili/
 
 ### 图片优化（弱网加载优化）
 - 所有封面图使用 `next/image` 组件（`Image`），自动 WebP/AVIF 格式转换 + 响应式 srcset
+- `next.config.ts` `images.remotePatterns` 图片域名白名单：`cdn.your-domain.com`（R2 自定义域占位，部署时替换为实际图片域名 `R2_PUBLIC_URL` 主机名）+ `pub-...r2.dev`（R2 公共域，迁移前旧图）+ `picsum.photos`；**更换图片域名必须同步加入白名单**，否则 `/_next/image` 优化代理返回 400，封面加载不出来（主项目域名迁移时曾遗漏新域名导致该 bug，同步自主项目 896f40c）
 - `sizes` 属性按屏幕宽度适配：移动端 50vw，平板 33vw，桌面 25vw/20vw
 - `loading="lazy"` 懒加载 + `decoding="async"` 异步解码
-- `layout.tsx` 添加 R2 域名 `preconnect` + `dns-prefetch`（提前建立连接）
+- 部署时建议在 `layout.tsx` `<head>` 为实际图片域名添加 `preconnect` + `dns-prefetch`（提前建立连接；本脱敏版未内置图片域名预连接，占位域名预连接无意义故不加入）
 - 未上传封面时使用本地 `public/placeholder.svg` 占位图
 
 ### 弱网交互优化
