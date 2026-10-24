@@ -306,6 +306,13 @@ H:\bilibili/
 - **代码分割** — `CommentSection`、`Recommendations`、`AuthModal` 通过 `next/dynamic` 懒加载，视频播放页首屏 JS 减少约 30%
 - **播放器预加载** — `layout.tsx` 中 Aliplayer CDN 添加 `<link rel="preload" as="script">`，提前加载播放器脚本
 - **API 缓存头** — `next.config.ts` 为推荐视频（60s + stale-while-revalidate 300s）、视频详情（30s + 120s）、静态资源（1年 immutable）设置 Cache-Control
+- **静态资源长缓存（60 天）** — 封面/图文/音频/视频等文件名含时间戳+随机串、内容不可变，统一缓存 60 天（`max-age=5184000`）：
+  - `images.minimumCacheTTL: 5184000` — `/_next/image` 图片代理缓存 60 天（上游 R2 未带缓存头时也生效）
+  - R2 对象写入时带 `Cache-Control: public, max-age=5184000`（Worker 上传与 `uploadBufferToR2` 均设置）；是否在 Cloudflare 边缘缓存由 Zone Cache Rule 决定
+  - `/uploads/(.*)`、`/emoji/(.*)`、根目录 `*.svg` 响应头缓存 60 天 immutable（`CACHE_60D`）
+  - 动态页面/HTML、API 保持原有短缓存或 `no-store`，避免内容过期；`_next/static` JS/CSS 仍为 1 年 immutable
+  - 历史对象补写：Worker `POST /backfill-cache?cursor=&limit=`（R2 内部 get+put 流式自拷贝，不改动文件内容，Bearer 鉴权 + 游标分页；Worker 代码独立部署，不在本仓库内）
+  - 注意：R2 自定义域名 `cdn.your-domain.com` 默认**不在 Cloudflare 边缘缓存**（`cf-cache-status: DYNAMIC`），浏览器缓存不受影响；想让边缘也缓存需在 Cloudflare 面板加 Zone 级 Cache Rule（Edge/Browser TTL 60 天）
 - **客户端 fetch 缓存** — `src/lib/fetch-cache.ts` 提供 `cachedFetch(url, ttlMs)` 工具函数，推荐列表 60 秒缓存、播放列表 5 分钟缓存、VOD playAuth 60 秒缓存
 - **播放列表减量** — 播放列表从 50 条减为 20 条，减少首屏传输体积
 
@@ -408,6 +415,10 @@ UPLOAD_TOKEN_SECRET=your-upload-token-secret
 - `/api/videos/recommendations` — `Cache-Control: public, s-maxage=60, stale-while-revalidate=300`（推荐视频 60s 缓存）
 - `/api/videos/:path*/detail` — `Cache-Control: public, s-maxage=30, stale-while-revalidate=120`（视频详情 30s 缓存）
 - `/lib/(.*)` — `Cache-Control: public, max-age=31536000, immutable`（静态资源长期缓存）
+- `/_next/image` — 图片代理缓存 60 天（`images.minimumCacheTTL: 5184000`，封面均以不可变文件名存储）
+- `/uploads/(.*)`、`/emoji/(.*)`、根目录 `*.svg` — `Cache-Control: public, max-age=5184000, immutable`（本地静态资源 60 天）
+- R2 对象（封面/图文/音频/视频直链）— 上传时写入 `Cache-Control: public, max-age=5184000`，**浏览器缓存 60 天**（边缘是否缓存由 Zone Cache Rule 决定）；Worker 上传与 `uploadBufferToR2`（音频标准化）均设置，历史对象用 Worker `/backfill-cache` 补写
+- 动态 HTML 页面 — 保持 `no-store`，确保内容实时
 
 ### 错误信息脱敏
 - 生产环境 API 错误不返回原始错误详情

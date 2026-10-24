@@ -6,6 +6,17 @@
 
 ## 已完成工作
 
+### 本次会话（静态资源缓存统一改为 60 天，同步自主项目 28acac8 / 02c8f93）
+- **`现状`** — 项目原本只有零散缓存：`_next/static` JS/CSS 1 年 immutable、`/_next/image` 仅 4 小时（Next 默认）、R2 直链封面/视频/音频**无任何 Cache-Control**、`public/` 本地静态文件 `max-age=0`
+- **`改动`** — 静态资源统一缓存 60 天（`max-age=5184000`，文件名均含时间戳+随机串不可变）：
+  - `next.config.ts`：`images.minimumCacheTTL: 5184000`（图片代理 60 天）；新增 `CACHE_60D` 响应头规则 —— `/uploads/(.*)`、`/emoji/(.*)`、根目录 `*.svg`
+  - `src/lib/r2.ts`：新增导出常量 `R2_CACHE_CONTROL`，`uploadBufferToR2`（音频标准化）与 `getPresignedUploadUrl` 均带 `CacheControl`
+  - 动态 HTML/API 缓存策略保持不变（`no-store` / 短 TTL），避免内容过期
+  - Worker 侧（上传写入 `httpMetadata.cacheControl`、`POST /backfill-cache` 补写历史对象）属于独立部署的 Worker 代码，本仓库无 `ops/` 目录，不在本次同步范围
+- **`测试`** — 本项目无 `node_modules`、无法执行 `npm run build`/`tsc`，故仅做人工核对（对照主项目同源代码逐行比对）；主项目实测结论可作参照：`/_next/image` → `max-age=5184000`、`placeholder.svg`/`emoji`/`favicon.svg`/`/uploads/...` → `5184000, immutable`、`_next/static` 仍 1 年、首页 HTML 仍 `no-store`
+- **`历史对象补写`** — 已存在的 R2 对象需用 Worker `POST /backfill-cache?cursor=&limit=` 分页补写缓存头（R2 内部 `get`+`put` 流式自拷贝，不改动文件内容，Bearer 鉴权 + 游标分页），按返回 `cursor` 继续直到 `cursor: null`
+- **`边缘缓存`** — R2 自定义域名 `cdn.your-domain.com` 默认**不在 Cloudflare 边缘缓存**（`cf-cache-status: DYNAMIC`），浏览器缓存不受影响；想让边缘也缓存需在 Cloudflare 面板加 Zone 级 Cache Rule（Edge/Browser TTL 均 60 天）。R2 直链不经过本站服务器，此项不影响 VPS 负载
+
 ### 本次会话（封面 400 修复：域名迁移后 next/image 白名单遗漏新域名，同步自主项目 896f40c）
 - **`现象`** — 迁移后上传的图文封面走 `/_next/image` 图片优化代理时返回 400 (Bad Request)，封面加载不出来（图片直连本身正常）；主项目中具体表现为标题「像风里的恍惚和叹息」的图文封面
 - **`根因`** — 域名迁移提交把 `.env` 的 `R2_PUBLIC_URL` 改为新图片域名，但没把新域名加进 `next.config.ts` 的 `images.remotePatterns`（白名单里只有迁移前的 `pub-...r2.dev` 和 `picsum.photos`）。图片直连访问正常（200），但前端 `<Image>` 走 `/_next/image` 优化代理时被白名单拦截返回 400；迁移前的历史封面用旧域名不受影响
@@ -29,8 +40,8 @@
 
 ### 本次会话（SSL证书修复 + R2 Worker代理上传 + OSS迁移 + next/image + 无限滚动）
 - **`SSL证书修复`** — 源站证书（DigiCert Encryption Everywhere 90天）于 2026-08-13 过期导致 Cloudflare 526 错误；替换为 Cloudflare Origin CA 证书（15年有效，到 2041-08-12），安装到 /etc/nginx/ssl/
-- **`Cloudflare R2 Worker代理上传`** — R2 S3 API (r2.cloudflarestorage.com) 在中国区域 TLS 握手失败，浏览器上传 ERR_SSL_VERSION_OR_CIPHER_MISMATCH；新建 Cloudflare Worker (r2-upload.haol58509.workers.dev) 作为上传代理，nginx 反代 /r2-upload/ → Worker → R2，HMAC-SHA256 token 认证（UPLOAD_TOKEN_SECRET），15分钟有效期
-- **`OSS→R2数据迁移`** — 117个OSS文件通过Worker代理迁移到R2，数据库URL全部更新（OSS→R2），0残留；R2公共域名 pub-eac7cb1048244abfbb60dfa583083e0e.r2.dev
+- **`Cloudflare R2 Worker代理上传`** — R2 S3 API (r2.cloudflarestorage.com) 在中国区域 TLS 握手失败，浏览器上传 ERR_SSL_VERSION_OR_CIPHER_MISMATCH；新建 Cloudflare Worker（占位 `your-worker.your-subdomain.workers.dev`）作为上传代理，nginx 反代 Worker 路径前缀 → Worker → R2，HMAC-SHA256 token 认证（UPLOAD_TOKEN_SECRET），15分钟有效期
+- **`OSS→R2数据迁移`** — 117个OSS文件通过Worker代理迁移到R2，数据库URL全部更新（OSS→R2），0残留；R2公共域名 `pub-...r2.dev`
 - **`next/image封面优化`** — video-card.tsx 从 <img> 改为 <Image> (next/image)，自动WebP/AVIF转换+响应式srcset（sizes属性按屏幕宽度适配），next.config.ts添加R2域名白名单
 - **`主页无限滚动`** — 首页SSR直出前20条（take:20），新增InfiniteVideoGrid客户端组件（IntersectionObserver + 400px预加载），API支持cursor游标分页
 - **`同步`** — 待同步至Qbilibili

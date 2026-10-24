@@ -8,9 +8,13 @@ for (const interfaces of Object.values(networkInterfaces())) {
   }
 }
 
+const CACHE_60D = "public, max-age=5184000, immutable";
+
 const nextConfig: NextConfig = {
   allowedDevOrigins: [...ips],
   images: {
+    // 图片代理缓存 60 天：封面等图片 URL 均带时间戳不可变，上游 R2 未返回缓存头时以此为准
+    minimumCacheTTL: 5184000,
     // 图片域名白名单：封面走 /_next/image 优化代理时按此白名单校验，
     // 更换图片域名（.env 的 R2_PUBLIC_URL）必须同步加入白名单，否则封面 400 加载不出来
     remotePatterns: [
@@ -42,6 +46,19 @@ const nextConfig: NextConfig = {
     {
       source: "/lib/(.*)",
       headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+    },
+    {
+      // 本地静态资源：文件名均含时间戳/版本号不可变，缓存 60 天
+      source: "/uploads/(.*)",
+      headers: [{ key: "Cache-Control", value: CACHE_60D }],
+    },
+    {
+      source: "/emoji/(.*)",
+      headers: [{ key: "Cache-Control", value: CACHE_60D }],
+    },
+    {
+      source: "/:file.svg",
+      headers: [{ key: "Cache-Control", value: CACHE_60D }],
     },
   ],
 };

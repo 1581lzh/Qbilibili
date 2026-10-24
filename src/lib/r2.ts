@@ -17,11 +17,16 @@ const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL!;
 const WORKER_URL = process.env.WORKER_URL!;
 const UPLOAD_TOKEN_SECRET = process.env.UPLOAD_TOKEN_SECRET!;
 
+/** 静态资源缓存 60 天（R2 对象文件名含时间戳+随机串，内容不可变） */
+export const R2_CACHE_CONTROL = "public, max-age=5184000";
+
 export async function getPresignedUploadUrl(key: string, contentType: string, expiresIn = 900): Promise<{ uploadUrl: string; publicUrl: string }> {
   const command = new PutObjectCommand({
     Bucket: R2_BUCKET,
     Key: key,
     ContentType: contentType,
+    // 注意：presigned PUT 的 CacheControl 会被签名，调用方发送时需携带同名头
+    CacheControl: R2_CACHE_CONTROL,
   });
   const uploadUrl = await getSignedUrl(r2, command, { expiresIn });
   return { uploadUrl, publicUrl: `${R2_PUBLIC_URL}/${key}` };
@@ -77,6 +82,7 @@ export async function uploadBufferToR2(key: string, buffer: Buffer, contentType:
     Key: key,
     Body: buffer,
     ContentType: contentType,
+    CacheControl: R2_CACHE_CONTROL,
   }));
   return `${R2_PUBLIC_URL}/${key}`;
 }
