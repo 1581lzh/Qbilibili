@@ -866,6 +866,7 @@ sudo firewall-cmd --reload
 - rAF 恒定速度（2200px/s）扩散，`scale(currentR/radius)` 从 0→1；圆基准尺寸 `radius*2`（注意不能设 0 尺寸，否则放大不可见）
 - 圆中圆：中途再点生成相反颜色圆叠在上面（数组尾 = 最上层），同速扩散；最上层圆覆盖全屏时一次性切换 `.dark`（只按最后一次颜色切一次）
 - 背景完成后给根元素加 `theme-text-fade`（globals.css，0.35s 颜色/边框过渡）让文字/UI 单独渐变；圆保留 400ms 再移除避免背景切换瞬间闪烁
+- **收尾计时器可取消** — 圆保持的 400ms 用 `cleanupTimerRef` 持有；若在这 400ms 内再次切换（此时第一轮圆已满屏、`.dark` 刚翻到上一轮目标），新点击先 `clearTimeout` 旧计时器再叠新圆。否则旧计时器会在新圆扩散途中清空 `reveals` 并移除主题过渡 class，导致新圆消失、`.dark` 停在上一轮颜色（主题状态与画面不一致）
 
 ### 阿里云 SDK 相关
 - **Aliplayer 播放器 CDN**（2.16.3+ 路径变更）：`https://g.alicdn.com/apsara-media-box/imp-web-player/{版本号}/`

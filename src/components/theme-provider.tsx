@@ -50,6 +50,16 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const rafRef = useRef(0);
   const lastTRef = useRef(0);
   const idRef = useRef(0);
+  // 收尾计时器（圆保持 400ms 后清理）。必须可取消：动画刚结束的 400ms 内再次切换时，
+  // 旧计时器若照常触发，会把新加的圆一并清掉，且 class 永远不会切到新主题。
+  const cleanupTimerRef = useRef<number | null>(null);
+
+  const clearCleanupTimer = () => {
+    if (cleanupTimerRef.current !== null) {
+      window.clearTimeout(cleanupTimerRef.current);
+      cleanupTimerRef.current = null;
+    }
+  };
 
   // 初始主题：先读 localStorage（保持即时渲染，与防白闪脚本一致），
   // 登录用户再异步从数据库恢复（跨设备/刷新同步，覆盖本地值）
@@ -115,7 +125,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
         // 避免 .dark 切换瞬间露出「白/黑闪一下」。文字只按最上层圆（最后一次）渐变一次。
         document.documentElement.classList.add("theme-text-fade");
         document.documentElement.classList.toggle("dark", topTarget === "dark");
-        window.setTimeout(() => {
+        clearCleanupTimer();
+        cleanupTimerRef.current = window.setTimeout(() => {
+          cleanupTimerRef.current = null;
           document.documentElement.classList.remove("theme-text-fade");
           revealsRef.current = [];
           setReveals([]);
@@ -132,13 +144,20 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   // 组件卸载清理
   useEffect(() => {
-    return () => cancelAnimationFrame(rafRef.current);
+    return () => {
+      cancelAnimationFrame(rafRef.current);
+      clearCleanupTimer();
+    };
   }, []);
 
   const setTheme = (t: Theme, origin?: { x: number; y: number }) => {
     updateTheme(t, userId);
     setThemeState(t);
     if (origin && typeof window !== "undefined") {
+      // 上一轮还有收尾计时器没到点又切了一次：先取消它，否则它会在新圆扩散途中
+      // 清空 reveals 并移除主题 class，导致动画消失、页面停在旧颜色。
+      // 旧圆保持满屏不动，作为新圆的底衬（圆中圆叠加）。
+      clearCleanupTimer();
       deferClassRef.current = true;
       const target: "light" | "dark" = t === "system" ? getSystemTheme() : t;
       // 圆只承担「背景层」的颜色：浅色 #ffffff / 深色 zinc-950 (#09090b)，与 body 背景一致，
