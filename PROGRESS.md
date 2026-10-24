@@ -15,7 +15,7 @@
   - Worker 侧（上传写入 `httpMetadata.cacheControl`、`POST /backfill-cache` 补写历史对象）属于独立部署的 Worker 代码，本仓库无 `ops/` 目录，不在本次同步范围
 - **`测试`** — 本项目无 `node_modules`、无法执行 `npm run build`/`tsc`，故仅做人工核对（对照主项目同源代码逐行比对）；主项目实测结论可作参照：`/_next/image` → `max-age=5184000`、`placeholder.svg`/`emoji`/`favicon.svg`/`/uploads/...` → `5184000, immutable`、`_next/static` 仍 1 年、首页 HTML 仍 `no-store`
 - **`历史对象补写`** — 已存在的 R2 对象需用 Worker `POST /backfill-cache?cursor=&limit=` 分页补写缓存头（R2 内部 `get`+`put` 流式自拷贝，不改动文件内容，Bearer 鉴权 + 游标分页），按返回 `cursor` 继续直到 `cursor: null`
-- **`边缘缓存`** — R2 自定义域名 `cdn.your-domain.com` 默认**不在 Cloudflare 边缘缓存**（`cf-cache-status: DYNAMIC`），浏览器缓存不受影响；想让边缘也缓存需在 Cloudflare 面板加 Zone 级 Cache Rule（Edge/Browser TTL 均 60 天）。R2 直链不经过本站服务器，此项不影响 VPS 负载
+- **`边缘缓存`** — Zone 级 Cache Rule（`hostname eq 图片域名`，Edge TTL 覆盖 60 天、Browser TTL 保留源站）实测 GET 返回 `cf-cache-status: HIT`、`age` 递增。注意测量坑：`curl -I` 是 HEAD 请求，Cloudflare 不缓存 HEAD，永远显示 `DYNAMIC`，必须用 GET 验证。R2 直链不经过本站服务器，此项不影响 VPS 负载
 
 ### 本次会话（封面 400 修复：域名迁移后 next/image 白名单遗漏新域名，同步自主项目 896f40c）
 - **`现象`** — 迁移后上传的图文封面走 `/_next/image` 图片优化代理时返回 400 (Bad Request)，封面加载不出来（图片直连本身正常）；主项目中具体表现为标题「像风里的恍惚和叹息」的图文封面

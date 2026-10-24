@@ -312,7 +312,10 @@ H:\bilibili/
   - `/uploads/(.*)`、`/emoji/(.*)`、根目录 `*.svg` 响应头缓存 60 天 immutable（`CACHE_60D`）
   - 动态页面/HTML、API 保持原有短缓存或 `no-store`，避免内容过期；`_next/static` JS/CSS 仍为 1 年 immutable
   - 历史对象补写：Worker `POST /backfill-cache?cursor=&limit=`（R2 内部 get+put 流式自拷贝，不改动文件内容，Bearer 鉴权 + 游标分页；Worker 代码独立部署，不在本仓库内）
-  - 注意：R2 自定义域名 `cdn.your-domain.com` 默认**不在 Cloudflare 边缘缓存**（`cf-cache-status: DYNAMIC`），浏览器缓存不受影响；想让边缘也缓存需在 Cloudflare 面板加 Zone 级 Cache Rule（Edge/Browser TTL 60 天）
+  - 边缘缓存：Zone 级 Cache Rule（表达式 `http.host eq "cdn.your-domain.com"`，`cache: true` + Edge TTL 覆盖 60 天 + Browser TTL 保留源站），实测 GET 返回 `cf-cache-status: HIT`、`age` 递增
+  - 测量坑：`curl -I`（HEAD）Cloudflare 不缓存，永远显示 `DYNAMIC`，必须用 GET 验证
+  - `pub-*.r2.dev` 开发域名按官方说明不支持缓存（WAF/Cache Rules 均不生效）
+  - 部署时按同样表达式把域名换成自己的图片域名即可
 - **客户端 fetch 缓存** — `src/lib/fetch-cache.ts` 提供 `cachedFetch(url, ttlMs)` 工具函数，推荐列表 60 秒缓存、播放列表 5 分钟缓存、VOD playAuth 60 秒缓存
 - **播放列表减量** — 播放列表从 50 条减为 20 条，减少首屏传输体积
 
