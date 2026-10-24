@@ -77,6 +77,7 @@ export const videoSchema = z.object({
   postType: z.enum(["video", "image_text"]).default("video"),
   imageUrls: z.string().optional(),
   livePhotoVideos: z.string().optional(),
+  livePhotoAudio: z.boolean().optional(),
   musicUrl: safeUrl.optional(),
   musicUrls: z.string().optional(),
   imageDuration: z.number().min(1).max(30).optional().nullable(),
@@ -98,6 +99,7 @@ export const videoUpdateSchema = z.object({
   coverUrl: safeUrl.optional(),
   imageUrls: z.string().optional(),
   livePhotoVideos: z.string().optional(),
+  livePhotoAudio: z.boolean().optional(),
   imageDuration: z.number().min(1).max(30).optional().nullable(),
 });
 

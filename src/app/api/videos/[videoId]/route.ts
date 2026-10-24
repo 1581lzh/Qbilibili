@@ -80,6 +80,7 @@ export async function PUT(
       ...(updateData.coverUrl && { coverUrl: updateData.coverUrl }),
       ...(updateData.imageUrls && { imageUrls: updateData.imageUrls }),
       ...(updateData.livePhotoVideos !== undefined && { livePhotoVideos: updateData.livePhotoVideos }),
+      ...(updateData.livePhotoAudio !== undefined && { livePhotoAudio: updateData.livePhotoAudio }),
       ...(updateData.imageDuration !== undefined && { imageDuration: updateData.imageDuration }),
     },
   });

@@ -59,6 +59,7 @@ export default function UploadPage() {
   const [selectedCoverIndex, setSelectedCoverIndex] = useState<number | null>(null);
   const [music, setMusic] = useState<{ file: File; preview: string }[]>([]);
   const [imageDuration, setImageDuration] = useState<number | null>(3);
+  const [livePhotoAudio, setLivePhotoAudio] = useState(false);
   const [compressDialogOpen, setCompressDialogOpen] = useState(false);
   const [compressTarget, setCompressTarget] = useState<{ file: File; type: "image" | "music" } | null>(null);
   // 图文投稿中选择了超时长视频的提示框
@@ -432,8 +433,10 @@ export default function UploadPage() {
         // Use coverIndex and imageDuration from ImageTextUploadPage component
         const coverIdx = (window as any).__coverIndex ?? 0;
         const imgDuration = (window as any).__imageDuration ?? null;
+        const liveAudio = (window as any).__livePhotoAudio ?? false;
         delete (window as any).__coverIndex;
         delete (window as any).__imageDuration;
+        delete (window as any).__livePhotoAudio;
         const coverUrl = imageUrls[coverIdx] || imageUrls[0];
 
         const res = await fetch("/api/videos", {
@@ -448,6 +451,7 @@ export default function UploadPage() {
             livePhotoVideos: livePhotoVideos.some((v) => v) ? JSON.stringify(livePhotoVideos) : undefined,
             musicUrls: musicUrls.length > 0 ? JSON.stringify(musicUrls) : undefined,
             imageDuration: imgDuration,
+            livePhotoAudio: liveAudio,
           }),
         });
 
@@ -558,6 +562,8 @@ export default function UploadPage() {
             setMusic={setMusic}
             imageDuration={imageDuration}
             setImageDuration={setImageDuration}
+            livePhotoAudio={livePhotoAudio}
+            setLivePhotoAudio={setLivePhotoAudio}
             loading={loading}
             uploadProgress={uploadProgress}
             uploadStatus={uploadStatus}
@@ -565,6 +571,7 @@ export default function UploadPage() {
               // Store coverIndex and imageDuration for form submission
               (window as any).__coverIndex = coverIdx;
               (window as any).__imageDuration = imageDuration;
+              (window as any).__livePhotoAudio = livePhotoAudio;
               // Directly call handleSubmit
               handleSubmit({ preventDefault: () => {} } as React.FormEvent);
             }}

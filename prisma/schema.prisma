@@ -42,6 +42,7 @@ model Video {
   musicUrls       String?  // JSON array of music URLs (for multi-audio support)
   imageDuration   Float?   // Image preview duration in seconds (image_text only, null=auto)
   livePhotoVideos String?  // JSON array of video URLs, paired 1:1 with imageUrls (empty string = static image)
+  livePhotoAudio  Boolean  @default(false) // 实况照片是否播放原声（默认关闭，只播背景音乐）
   audioNormalized Boolean  @default(false)
   normalizedUrl   String?
   author          User     @relation(fields: [authorId], references: [id])

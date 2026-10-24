@@ -25,6 +25,8 @@ interface ImageTextUploadPageProps {
   setMusic: React.Dispatch<React.SetStateAction<{ file: File; preview: string }[]>>;
   imageDuration: number | null;
   setImageDuration: (v: number | null) => void;
+  livePhotoAudio: boolean;
+  setLivePhotoAudio: (v: boolean) => void;
   loading: boolean;
   uploadProgress: number;
   uploadStatus: string;
@@ -137,6 +139,8 @@ export function ImageTextUploadPage({
   setMusic,
   imageDuration,
   setImageDuration,
+  livePhotoAudio,
+  setLivePhotoAudio,
   loading,
   uploadProgress,
   uploadStatus,
@@ -904,6 +908,44 @@ export function ImageTextUploadPage({
               {imageDuration === null
                 ? "自动模式：根据音频时长和图片数量自动计算每张图片的停留时长"
                 : "手动模式：设置每张图片的固定停留时长"}
+            </p>
+          </div>
+        )}
+
+        {/* Live photo original audio setting */}
+        {images.some((img) => img.livePhotoVideo) && (
+          <div>
+            <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              实况原声
+            </label>
+            <div className="inline-flex rounded-lg border border-zinc-200 bg-zinc-100 p-1 dark:border-zinc-700 dark:bg-zinc-800">
+              <button
+                type="button"
+                onClick={() => setLivePhotoAudio(false)}
+                className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+                  !livePhotoAudio
+                    ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-100"
+                    : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                }`}
+              >
+                关闭
+              </button>
+              <button
+                type="button"
+                onClick={() => setLivePhotoAudio(true)}
+                className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+                  livePhotoAudio
+                    ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-100"
+                    : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                }`}
+              >
+                开启
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-zinc-400">
+              {livePhotoAudio
+                ? "播放实况照片时会同时播放视频原声，与背景音乐叠加；观众仍可在播放器里临时关闭"
+                : "默认只播放背景音乐；开启后播放实况照片时同时播放视频原声"}
             </p>
           </div>
         )}

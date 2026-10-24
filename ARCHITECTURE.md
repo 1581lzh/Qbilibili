@@ -205,6 +205,7 @@ H:\bilibili/
 - `postType`: 投稿类型（"video" 或 "image_text"）
 - `imageUrls`: 图片 URL 列表（JSON 字符串，图文投稿时使用）
 - `livePhotoVideos`: 实况照片视频 URL 列表（JSON 字符串，与 imageUrls 一一对应，空字符串表示静态图）
+- `livePhotoAudio`: 实况照片是否播放原声（默认 false，只播背景音乐；观众可在播放器临时开关）
 - `musicUrl`: 第一首背景音乐 URL（向后兼容）
 - `musicUrls`: 背景音乐 URL 列表（JSON 字符串，支持多首音频拼接）
 - `imageDuration`: 图片轮播时长（秒，仅图文类型，null=自动模式，1-30=手动模式）
@@ -617,13 +618,14 @@ sudo firewall-cmd --reload
 35. **图文播放优化** — 播放/暂停图标正确显示（暂停显示▶，播放显示⏸）；浏览器阻止自动播放时自动降级到暂停状态，用户交互后恢复
 36. **音频响度标准化** — 上传视频后自动使用 FFmpeg loudnorm（EBU R128，-14 LUFS）标准化音频响度，支持 R2 和 VOD 两种视频来源，异步队列处理，非阻塞播放；启动时自动回填未处理的旧视频
 37. **Emoji 支持** — 评论/投稿支持 Unicode emoji 和抖音表情包，emoji 选择器面板（分类浏览 + 搜索），contentEditable 实时预览 emoji 图片，抖音表情包 214 个（存储在 public/emoji/douyin/），B站格式兼容（`:表情名:`语法）
-38. **实况照片（Live Photo）支持** — 图文投稿支持实况照片，播放时像抖音一样自动静音播放实况视频，播完继续轮播
+38. **实况照片（Live Photo）支持** — 图文投稿支持实况照片，播放时可选是否播放实况原声（默认静音只播 BGM），播完继续轮播
   - **多格式解析**（`src/lib/live-photo.ts`）：
     - Android Motion Photo：单文件 JPEG 内嵌 MP4，用 `motion-photo` 的 `MotionPhotoParser` 解析（XMP 元数据 + ftyp 回退）
     - Apple .livp 压缩包：用 `jszip` 解包提取图片+视频
     - Apple 分离格式（HEIC + MOV）：用 `heic-normalize` 将 HEIC 转 JPEG（Safari 原生解码 + WASM 兜底），按文件名自动配对（如 `IMG_1234.HEIC` + `IMG_1234.MOV`），选择顺序无关
   - **存储**：Video 表新增 `livePhotoVideos` 字段（JSON 数组，与 imageUrls 一一对应，`""` 表示静态图），实况视频段以 video 类型上传 R2
-  - **播放**：轮播到实况图自动静音播放视频，对应进度条一节显示视频实时进度（timeupdate 驱动，非倒计时）；视频完整播完后再切下一张，融入轮播节奏；背景音乐保持正常播放（仅视频静音）
+  - **播放**：轮播到实况图自动静音播放视频，对应进度条一节显示视频实时进度（timeupdate 驱动，非倒计时）；视频完整播完后再切下一张，融入轮播节奏；背景音乐保持正常播放（默认仅视频静音）
+  - **原声开关（作品级 + 播放器级）**：`Video.livePhotoAudio` 控制该作品默认是否播放实况原声（投稿/编辑页可设置，默认关闭）；播放器控制栏「原声」按钮供观众临时切换（仅含实况的图文显示）。开启后实况原声与 BGM 叠加、互不压低，共用播放器主音量/静音；带声音播放被浏览器自动播放策略拦截时自动退回静音，保证实况动画不中断
   - **播放阶段机**：实况图播放流程为 `static-preview（1s封面）→ live-fade-in（交叉淡化）→ 视频播放 → live-fade-out（交叉淡化）→ static-preview（1s封面）→ 循环`。用链式定时器 + epoch 守卫推进；单图 loop 用 `liveRestartTick` 信号触发重播（currentIndex 不变时 React 不重渲染）；实况结束用 React 原生 `onEnded` 绑定
   - **渲染实现（单 canvas 像素级混合）**：真 `<video>` `opacity:0` + `absolute inset-0` 隐藏仅作帧源（继续硬件解码、驱动 `onEnded`/进度条/首帧），新增 `<canvas>` `absolute inset-0` 用 `requestAnimationFrame` 逐帧 `drawImage` 镜像视频；同一画布里用 `globalAlpha` 同时绘制「封面帧（`1-fade`）+ 实况帧（`fade`）」实现像素级半透明交叉淡化，不依赖任何元素层叠关系。封面 `<img>` 常驻渲染并置于 canvas 下方（`z-11` < canvas `z-12`），作为 canvas 首帧绘制前的无缝底衬（消除淡入空档闪烁）；封面帧用 `Image` 对象绘制（同 URL 走缓存），`drawImage` 按 `object-contain` 等比缩放居中（`Math.min`）。淡入淡出用 `easeInOutQuad` 缓动（`liveFadeRef` + `fadeAnimRef`），首帧 `loadeddata` 后再淡入、1.5s 兜底防卡死。**踩坑记录**：canvas 必须用 `absolute inset-0`（`relative` 不脱离文档流会被挤到容器外裁掉）；Edge 下 `opacity:0` 的独立合成层（`will-change` 等）仍会遮挡下方内容，故不可依赖封面 img 层叠做淡化。详细分析见 [CROSSFADE-ISSUE.md](./CROSSFADE-ISSUE.md)
   - **暂停保留进度原地暂停** — 实况播放中暂停不再跳回封面：阶段机暂停分支 `video.pause()` 原地冻结画面与进度，恢复时从当前位置续播（恰好在播完淡出时刻暂停则重新淡入从头播）；独立播放 effect 加 `isPlaying` 守卫，元数据/进度监听拆独立 effect 驱动

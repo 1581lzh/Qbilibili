@@ -33,6 +33,7 @@ interface VideoInfo {
   postType?: string;
   imageUrls?: string | null;
   livePhotoVideos?: string | null;
+  livePhotoAudio?: boolean | null;
   musicUrl?: string | null;
   musicUrls?: string | null;
   imageDuration?: number | null;
@@ -86,7 +87,7 @@ function videoReducer(state: VideoState, action: VideoAction): VideoState {
 const LIVE_PREVIEW_MS = 1000; // 封面帧预览时长
 const LIVE_FADE_MS = 0.8; // 封面/实况交叉淡化时长
 
-function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, playMode, userId, onNext }: { imageUrls: string[]; livePhotoVideos?: string[] | null; musicUrls?: string[] | null; imageDuration?: number | null; playMode: PlayMode; userId?: string | null; onNext?: () => void }) {
+function ImageCarousel({ imageUrls, livePhotoVideos, livePhotoAudio, musicUrls, imageDuration, playMode, userId, onNext }: { imageUrls: string[]; livePhotoVideos?: string[] | null; livePhotoAudio?: boolean | null; musicUrls?: string[] | null; imageDuration?: number | null; playMode: PlayMode; userId?: string | null; onNext?: () => void }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(true); // Start playing by default
   const [totalAudioDuration, setTotalAudioDuration] = useState(0);
@@ -101,6 +102,8 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
   useEffect(() => { fetchVolume(userId).then(s => { setVolume(s.volume); setMuted(s.muted); }); }, [userId]);
   const [volume, setVolume] = useState(() => getSavedVolume(userId).volume);
   const [muted, setMuted] = useState(() => getSavedVolume(userId).muted);
+  // 实况原声：默认跟随作品设置（投稿时选择），观众可在播放器里临时开关
+  const [liveAudioOn, setLiveAudioOn] = useState(!!livePhotoAudio);
   const [showVolume, setShowVolume] = useState(false);
   const [showModeTooltip, setShowModeTooltip] = useState(false);
   // 弹层（音量条/模式提示）置于控制栏 overflow-hidden 之外，用按钮实际位置做绝对定位，避免被裁切
@@ -273,6 +276,31 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
   const liveVideosRef = useRef(liveVideos);
   liveVideosRef.current = liveVideos;
   const currentLiveVideo = liveVideos[currentIndex] || "";
+  // 实况原声状态用 ref 暴露给阶段机/播放回调（这些回调不随音量变化重建，避免重置播放进度）
+  const liveAudioOnRef = useRef(liveAudioOn);
+  const mutedRef = useRef(muted);
+  const volumeRef = useRef(volume);
+  useEffect(() => { liveAudioOnRef.current = liveAudioOn; }, [liveAudioOn]);
+  useEffect(() => { mutedRef.current = muted; }, [muted]);
+  useEffect(() => { volumeRef.current = volume; }, [volume]);
+
+  // 把主音量/静音/原声开关同步到实况视频元素（BGM 与实况互不压制，共用主音量）
+  const applyLiveAudio = useCallback((v: HTMLVideoElement) => {
+    v.volume = volumeRef.current;
+    v.muted = !(liveAudioOnRef.current && !mutedRef.current && volumeRef.current > 0);
+  }, []);
+
+  // 播放实况视频：带声音被浏览器拦截时退回静音，保证画面动画不中断（用户点击后可恢复）
+  const playLiveVideo = useCallback((v: HTMLVideoElement | null) => {
+    if (!v) return;
+    applyLiveAudio(v);
+    v.play().catch(() => {
+      if (!v.muted) {
+        v.muted = true;
+        v.play().catch(() => {});
+      }
+    });
+  }, [applyLiveAudio]);
   // Track each live photo video's duration (seconds) to balance auto-mode preview times
   const liveDurationsRef = useRef<number[]>([]);
   const [, setLiveDurationsTick] = useState(0);
@@ -374,9 +402,8 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
     if (!isPlaying) return;
     const v = livePhotoVideoRef.current;
     if (!v) return;
-    v.muted = true;
-    v.play().catch(() => {});
-  }, [currentLiveVideo, livePhase, liveFadeVisible, isPlaying]);
+    playLiveVideo(v);
+  }, [currentLiveVideo, livePhase, liveFadeVisible, isPlaying, playLiveVideo]);
 
   // 手工切换图片时：重置实况阶段为封面帧预览，并清掉所有实况定时器
   useEffect(() => {
@@ -629,12 +656,12 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
         if (v.ended) {
           // 恰好暂停在「播完淡出」时刻：重新淡入并从头播
           v.currentTime = 0;
-          v.play().catch(() => {});
+          playLiveVideo(v);
           liveFadeRef.current = 0;
           startLiveFade(1, LIVE_FADE_MS * 1000);
           setLivePhase("live-fade-in");
         } else if (v.paused) {
-          v.play().catch(() => {});
+          playLiveVideo(v);
         }
       }
       return;
@@ -664,13 +691,13 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
     }
 
     if (v) { v.currentTime = 0; }
-    (v as HTMLVideoElement).muted = true;
+    if (v) applyLiveAudio(v as HTMLVideoElement);
 
     return () => {
       clearLiveTimers();
       if (liveFadeTimerRef.current) { clearTimeout(liveFadeTimerRef.current); liveFadeTimerRef.current = null; }
     };
-  }, [currentLiveVideo, isPlaying, userInteracted, currentIndex, advanceImage, clearLiveTimers, liveRestartTick, startLiveFade]);
+  }, [currentLiveVideo, isPlaying, userInteracted, currentIndex, advanceImage, clearLiveTimers, liveRestartTick, startLiveFade, applyLiveAudio]);
 
   // 实况视频元数据与进度监听（独立于阶段机，暂停/恢复后依然驱动进度条与时长分配）
   useEffect(() => {
@@ -931,6 +958,35 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
       audioRef.current.volume = muted ? 0 : volume;
     }
   }, [volume, muted]);
+
+  // 主音量/静音/原声开关变化时，同步到正在播放的实况视频（与 BGM 叠加，互不压制）
+  useEffect(() => {
+    const v = livePhotoVideoRef.current;
+    if (v) applyLiveAudio(v);
+  }, [volume, muted, liveAudioOn, applyLiveAudio]);
+
+  // 切换实况原声：观众临时开关，不写回作品设置
+  const toggleLiveAudio = useCallback(() => {
+    const next = !liveAudioOn;
+    setLiveAudioOn(next);
+    // 主音量静音时开启原声：顺手解除静音（音量共用主音量）
+    if (next && muted) {
+      setMuted(false);
+      updateVolume({ volume, muted: false }, userIdRef.current);
+    }
+    const v = livePhotoVideoRef.current;
+    if (v) {
+      const audible = next && volume > 0;
+      v.volume = volume;
+      v.muted = !audible;
+      if (audible) {
+        v.play().catch(() => {
+          v.muted = true;
+          v.play().catch(() => {});
+        });
+      }
+    }
+  }, [liveAudioOn, muted, volume]);
 
   const toggleMute = useCallback(() => {
     setMuted(prev => {
@@ -1445,7 +1501,7 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
                         <video
                           ref={livePhotoVideoRef}
                           src={currentLiveVideo}
-                          muted
+                          muted={!(liveAudioOn && !muted && volume > 0)}
                           playsInline
                           loop={false}
                           preload="auto"
@@ -1627,6 +1683,21 @@ function ImageCarousel({ imageUrls, livePhotoVideos, musicUrls, imageDuration, p
                 )}
               </button>
             </div>
+            {/* 实况原声开关：仅当该图文含实况视频时显示 */}
+            {liveVideos.some(Boolean) && (
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); toggleLiveAudio(); }}
+                title={liveAudioOn ? "关闭实况原声（只留背景音乐）" : "开启实况原声（与背景音乐叠加）"}
+                className={`rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors ${
+                  liveAudioOn
+                    ? "bg-[#FB7299] text-white"
+                    : "bg-white/15 text-white/80 hover:bg-white/25 hover:text-white"
+                }`}
+              >
+                原声
+              </button>
+            )}
             <button
               type="button"
               onClick={(e) => {
@@ -1974,8 +2045,10 @@ export default function VideoPlaySection({
         >
           {state.video.postType === "image_text" && state.video.imageUrls ? (
             <ImageCarousel
+              key={state.video.id}
               imageUrls={JSON.parse(state.video.imageUrls)}
               livePhotoVideos={state.video.livePhotoVideos ? JSON.parse(state.video.livePhotoVideos) : null}
+              livePhotoAudio={state.video.livePhotoAudio}
               musicUrls={state.video.musicUrls ? JSON.parse(state.video.musicUrls) : (state.video.musicUrl ? [state.video.musicUrl] : null)}
               imageDuration={state.video.imageDuration}
               playMode={playMode}

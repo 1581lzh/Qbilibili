@@ -52,6 +52,7 @@ export default async function VideoPage({ params }: { params: Promise<{ id: stri
           postType: video.postType,
           imageUrls: video.imageUrls,
           livePhotoVideos: video.livePhotoVideos,
+          livePhotoAudio: video.livePhotoAudio,
           musicUrl: video.musicUrl,
           musicUrls: video.musicUrls,
           imageDuration: video.imageDuration,

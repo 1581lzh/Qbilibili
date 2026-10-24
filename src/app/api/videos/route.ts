@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: validation.error }, { status: 400 });
   }
 
-  const { title, description, coverUrl, videoUrl, vodVideoId, postType, imageUrls, livePhotoVideos, musicUrl, musicUrls, imageDuration } = validation.data;
+  const { title, description, coverUrl, videoUrl, vodVideoId, postType, imageUrls, livePhotoVideos, livePhotoAudio, musicUrl, musicUrls, imageDuration } = validation.data;
 
   // Parse musicUrls array and use first URL
   let finalMusicUrl = musicUrl || null;
@@ -44,6 +44,7 @@ export async function POST(request: Request) {
       postType,
       imageUrls: imageUrls || null,
       livePhotoVideos: livePhotoVideos || null,
+      livePhotoAudio: postType === "image_text" ? !!livePhotoAudio : false,
       musicUrl: finalMusicUrl,
       musicUrls: finalMusicUrls,
       imageDuration: imageDuration || null,

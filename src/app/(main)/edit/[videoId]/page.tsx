@@ -20,6 +20,7 @@ interface VideoData {
   musicUrl: string | null;
   musicUrls: string | null;
   imageDuration: number | null;
+  livePhotoAudio: boolean | null;
   author: { id: string; name: string };
 }
 
@@ -44,6 +45,7 @@ export default function EditVideoPage() {
   const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [livePhotoVideos, setLivePhotoVideos] = useState<string[]>([]);
   const [imageDuration, setImageDuration] = useState<number | null>(5);
+  const [livePhotoAudio, setLivePhotoAudio] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [selectedCoverIndex, setSelectedCoverIndex] = useState<number | null>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
@@ -88,6 +90,7 @@ export default function EditVideoPage() {
       setDescription(data.description || "");
       setCoverUrl(data.coverUrl);
       setImageDuration(data.imageDuration ?? null);
+      setLivePhotoAudio(!!data.livePhotoAudio);
 
       if (data.imageUrls) {
         setImageUrls(JSON.parse(data.imageUrls));
@@ -161,6 +164,7 @@ export default function EditVideoPage() {
             ? JSON.stringify(livePhotoVideos)
             : undefined,
           imageDuration: video?.postType === "image_text" ? imageDuration : undefined,
+          livePhotoAudio: video?.postType === "image_text" ? livePhotoAudio : undefined,
         }),
       });
 
@@ -464,6 +468,44 @@ export default function EditVideoPage() {
                     : "手动模式：设置每张图片的固定停留时长"}
                 </p>
               </div>
+
+              {/* Live photo original audio */}
+              {livePhotoVideos.some((v) => v) && (
+                <div className="mt-4">
+                  <label className="mb-2 block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                    实况原声
+                  </label>
+                  <div className="inline-flex rounded-lg border border-zinc-200 bg-zinc-100 p-1 dark:border-zinc-700 dark:bg-zinc-800">
+                    <button
+                      type="button"
+                      onClick={() => setLivePhotoAudio(false)}
+                      className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+                        !livePhotoAudio
+                          ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-100"
+                          : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                      }`}
+                    >
+                      关闭
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setLivePhotoAudio(true)}
+                      className={`rounded-md px-4 py-1.5 text-sm font-medium transition-colors ${
+                        livePhotoAudio
+                          ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-100"
+                          : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+                      }`}
+                    >
+                      开启
+                    </button>
+                  </div>
+                  <p className="mt-1 text-xs text-zinc-400">
+                    {livePhotoAudio
+                      ? "实况照片播放时同时播放视频原声，与背景音乐叠加"
+                      : "只播放背景音乐，实况视频静音（观众仍可在播放器临时开启原声）"}
+                  </p>
+                </div>
+              )}
             </div>
           )}
 
