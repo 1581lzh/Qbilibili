@@ -1649,7 +1649,7 @@ function ImageCarousel({ imageUrls, livePhotoVideos, livePhotoAudio, musicUrls, 
           </div>
 
           {/* Right: Mode selector + Fullscreen */}
-          <div className="flex items-center justify-end gap-2">
+          <div className="flex items-center justify-end gap-1.5 sm:gap-2">
             <button
               type="button"
               onClick={(e) => {
@@ -1690,7 +1690,7 @@ function ImageCarousel({ imageUrls, livePhotoVideos, livePhotoAudio, musicUrls, 
                 type="button"
                 onClick={(e) => { e.stopPropagation(); toggleLiveAudio(); }}
                 title={liveAudioOn ? "关闭实况原声（只留背景音乐）" : "开启实况原声（与背景音乐叠加）"}
-                className={`rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors ${
+                className={`shrink-0 whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-medium transition-colors ${
                   liveAudioOn
                     ? "bg-[#FB7299] text-white"
                     : "bg-white/15 text-white/80 hover:bg-white/25 hover:text-white"
