@@ -82,10 +82,11 @@ function videoReducer(state: VideoState, action: VideoAction): VideoState {
 
 // Image carousel for image_text posts
 
-// 实况照片过渡：先预览 1s 封面帧 → 封面淡出/实况淡入交叉过渡 → 实况完整播放
-// → 实况淡出/封面淡入交叉过渡 → 封面再预览 1s → 继续轮播下一张
-const LIVE_PREVIEW_MS = 1000; // 封面帧预览时长
-const LIVE_FADE_MS = 0.8; // 封面/实况交叉淡化时长
+// 实况照片过渡：先短暂预览封面帧 → 封面淡出/实况淡入交叉过渡 → 实况完整播放
+// → 实况淡出/封面淡入交叉过渡 → 封面短暂预览 → 继续轮播下一张
+// 之前封面预览 1s + 淡化 0.8s（合计约 1.8s 静止画面），用户反馈停留过久，已缩短为 0.3s + 0.5s。
+const LIVE_PREVIEW_MS = 300; // 封面帧预览时长
+const LIVE_FADE_MS = 0.5; // 封面/实况交叉淡化时长
 
 function ImageCarousel({ imageUrls, livePhotoVideos, livePhotoAudio, musicUrls, imageDuration, playMode, userId, onNext }: { imageUrls: string[]; livePhotoVideos?: string[] | null; livePhotoAudio?: boolean | null; musicUrls?: string[] | null; imageDuration?: number | null; playMode: PlayMode; userId?: string | null; onNext?: () => void }) {
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -525,7 +526,7 @@ function ImageCarousel({ imageUrls, livePhotoVideos, livePhotoAudio, musicUrls, 
 
   // Manual image switch - pauses auto-play
   const handleManualSwitch = useCallback((newIndex: number) => {
-    // 手动切到实况图：期望立即播放动画（1s 封面预览后淡入），不能被 userInteracted 卡死在封面；
+    // 手动切到实况图：期望立即播放动画（短暂封面预览后淡入），不能被 userInteracted 卡死在封面；
     // 实况的"播放中"语义本身就带节奏，无需暂停轮播。切到静态图仍置位（暂停轮播等用户看）。
     setUserInteracted(liveVideosRef.current[newIndex] ? false : true);
     const cur = currentIndexRef.current;
@@ -673,7 +674,7 @@ function ImageCarousel({ imageUrls, livePhotoVideos, livePhotoAudio, musicUrls, 
     livePhaseTickRef.current += 1;
     const epoch = livePhaseTickRef.current;
 
-    // ★ fade timer：1s 封面预览后触发交叉淡入。
+    // ★ fade timer：短暂封面预览后触发交叉淡入。
     //   无论 video ref 是否就绪，都先创建此定时器，防止首次渲染 v=null 时定时器链断裂。
     liveTimersRef.current.fade = setTimeout(() => {
       if (livePhaseTickRef.current !== epoch) return;

@@ -627,7 +627,7 @@ sudo firewall-cmd --reload
   - **存储**：Video 表新增 `livePhotoVideos` 字段（JSON 数组，与 imageUrls 一一对应，`""` 表示静态图），实况视频段以 video 类型上传 R2
   - **播放**：轮播到实况图自动静音播放视频，对应进度条一节显示视频实时进度（timeupdate 驱动，非倒计时）；视频完整播完后再切下一张，融入轮播节奏；背景音乐保持正常播放（默认仅视频静音）
   - **原声开关（作品级 + 播放器级）**：`Video.livePhotoAudio` 控制该作品默认是否播放实况原声（投稿/编辑页可设置，默认关闭）；播放器控制栏「原声」按钮供观众临时切换（仅含实况的图文显示）。开启后实况原声与 BGM 叠加、互不压低，共用播放器主音量/静音；带声音播放被浏览器自动播放策略拦截时自动退回静音，保证实况动画不中断
-  - **播放阶段机**：实况图播放流程为 `static-preview（1s封面）→ live-fade-in（交叉淡化）→ 视频播放 → live-fade-out（交叉淡化）→ static-preview（1s封面）→ 循环`。用链式定时器 + epoch 守卫推进；单图 loop 用 `liveRestartTick` 信号触发重播（currentIndex 不变时 React 不重渲染）；实况结束用 React 原生 `onEnded` 绑定
+  - **播放阶段机**：实况图播放流程为 `static-preview（0.3s封面）→ live-fade-in（0.5s交叉淡化）→ 视频播放 → live-fade-out（0.5s交叉淡化）→ static-preview（0.3s封面）→ 循环`。用链式定时器 + epoch 守卫推进；单图 loop 用 `liveRestartTick` 信号触发重播（currentIndex 不变时 React 不重渲染）；实况结束用 React 原生 `onEnded` 绑定
   - **渲染实现（单 canvas 像素级混合）**：真 `<video>` `opacity:0` + `absolute inset-0` 隐藏仅作帧源（继续硬件解码、驱动 `onEnded`/进度条/首帧），新增 `<canvas>` `absolute inset-0` 用 `requestAnimationFrame` 逐帧 `drawImage` 镜像视频；同一画布里用 `globalAlpha` 同时绘制「封面帧（`1-fade`）+ 实况帧（`fade`）」实现像素级半透明交叉淡化，不依赖任何元素层叠关系。封面 `<img>` 常驻渲染并置于 canvas 下方（`z-11` < canvas `z-12`），作为 canvas 首帧绘制前的无缝底衬（消除淡入空档闪烁）；封面帧用 `Image` 对象绘制（同 URL 走缓存），`drawImage` 按 `object-contain` 等比缩放居中（`Math.min`）。淡入淡出用 `easeInOutQuad` 缓动（`liveFadeRef` + `fadeAnimRef`），首帧 `loadeddata` 后再淡入、1.5s 兜底防卡死。**踩坑记录**：canvas 必须用 `absolute inset-0`（`relative` 不脱离文档流会被挤到容器外裁掉）；Edge 下 `opacity:0` 的独立合成层（`will-change` 等）仍会遮挡下方内容，故不可依赖封面 img 层叠做淡化。详细分析见 [CROSSFADE-ISSUE.md](./CROSSFADE-ISSUE.md)
   - **暂停保留进度原地暂停** — 实况播放中暂停不再跳回封面：阶段机暂停分支 `video.pause()` 原地冻结画面与进度，恢复时从当前位置续播（恰好在播完淡出时刻暂停则重新淡入从头播）；独立播放 effect 加 `isPlaying` 守卫，元数据/进度监听拆独立 effect 驱动
   - **时长分配**：自动模式下静态图时长 = `(总音频时长 - 实况视频总时长) / 静态图数`，实况图 = 视频完整时长，避免有的长有的短
@@ -853,7 +853,7 @@ sudo firewall-cmd --reload
   - 交互入口：鼠标滚轮缩放、鼠标双击缩放（单击经 350ms 延迟判双击后再触发播放/暂停，防闪烁）、触摸双指捏合缩放（原生 Touch 事件——pointer 多指事件浏览器表现不一致）、右上角 +/−/重置按钮、键盘 +/−/0 快捷键；scale>1 时隐藏切页箭头
 - **实况照片同步缩放** — 实况 video+canvas 移入当前页 slot 随轨道/缩放对齐，单图实况只渲染一份；canvas 内部分辨率跟随 scale×dpr 绘制（`W*scale*dpr`）保持放大清晰
 - **canvas 像素总预算 400 万** — 全屏（大容器）+ 高 DPR + 高缩放下画布内部分辨率可冲上千万像素，每帧 `clearRect` + 两层 `drawImage` 光栅化开销过大导致卡顿；`budget = 4_000_000`，超预算按 `sqrt(budget/px)` 等比压缩内部分辨率，略降放大锐度换流畅
-- **手动切到实况图立即播放** — `slideBy`/`settleDrag`/`handleManualSwitch` 三处切页入口统一按目标图是否实况决定 `userInteracted`：实况不置位（实况自带节奏，切过去即 1s 封面预览→淡入播放，不被卡死在封面），静态图仍置位（暂停轮播满进度）
+- **手动切到实况图立即播放** — `slideBy`/`settleDrag`/`handleManualSwitch` 三处切页入口统一按目标图是否实况决定 `userInteracted`：实况不置位（实况自带节奏，切过去即短暂封面预览→淡入播放，不被卡死在封面），静态图仍置位（暂停轮播满进度）
 - **移动端系统返回键重置缩放** — 只对触摸设备启用：进入缩放时 `history.pushState({ __biliCarouselZoom: true })` 压入标记；`popstate` 时若仍处于缩放 → `resetZoom()` + 重新压入标记（停留页内，再按一次才退出）；未缩放不补记录，浏览器指针自然滑向真实路由退出；桌面端保持原样直接退出
 - **全屏返回降级** — Android 浏览器无法拦截"返回键退出全屏"（无手势、不派发 popstate）：`fullscreenchange` 中检测到「退出全屏瞬间仍处于缩放」→ 重置缩放 + 立即重新 `requestFullscreen()` 重进全屏（把真退出留给下一次返回）；`catch(() => {})` 处理浏览器拒绝非手势重进（部分 Chrome），降级为「一次返回=重置+退全屏」
 - **全屏进出复位轨道状态** — 进全屏前复位 `dragX`/`transitioning`/`isSliding`/缩放，修复切页动画或拖动中进全屏导致三页轨道错位（内容贴左/右空、模糊背景跟随偏移）
