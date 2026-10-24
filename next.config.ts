@@ -18,7 +18,8 @@ const nextConfig: NextConfig = {
     // 图片域名白名单：封面走 /_next/image 优化代理时按此白名单校验，
     // 更换图片域名（.env 的 R2_PUBLIC_URL）必须同步加入白名单，否则封面 400 加载不出来
     remotePatterns: [
-      { protocol: "https", hostname: "pub-eac7cb1048244abfbb60dfa583083e0e.r2.dev" },
+      // 占位：R2 公共开发域（迁移前旧图），部署时替换为自己的 pub-xxxxxxxx.r2.dev
+      { protocol: "https", hostname: "pub-xxxxxxxx.r2.dev" },
       // 占位：R2 自定义域，部署时替换为实际图片域名（R2_PUBLIC_URL 的主机名）
       { protocol: "https", hostname: "cdn.your-domain.com" },
       { protocol: "https", hostname: "picsum.photos" },
