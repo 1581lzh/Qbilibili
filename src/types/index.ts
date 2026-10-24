@@ -21,6 +21,7 @@ export interface VideoWithAuthor {
   id: string;
   title: string;
   coverUrl: string;
+  postType: string;
   author: { id: string; name: string };
   _count: { likes: number; favorites: number };
 }

@@ -111,7 +111,8 @@ H:\bilibili/
 │   │   │   └── music-player.tsx        # 音乐播放器组件
 │   │   └── video/             # 视频相关组件
 │   │       ├── infinite-video-grid.tsx  # 首页无限滚动网格（IntersectionObserver + 游标分页；记录首屏条数，仅首屏卡片播入场动画，分页追加卡片 animate=false 直接显示，避免快速下滑时新旧动画混杂）
-│   │       ├── video-card.tsx             # 视频卡片（同名同色头像，animate 属性控制入场动画开关，默认 true，false 时 initial=false 无入场动画）
+│   │       ├── video-card.tsx             # 视频卡片（同名同色头像，animate 属性控制入场动画开关，默认 true，false 时 initial=false 无入场动画；封面左下角复用 PostTypeBadge 显示图文角标）
+│   │       ├── post-type-badge.tsx        # 封面投稿类型角标（仅 postType=image_text 显示，左下角半透明「图文」小标，pointer-events-none 不挡点击）
 │   │       ├── video-player.tsx           # 视频播放器（Aliplayer + 空格暂停 + 方向键/A-D 快退快进 5 秒）
 │   │       ├── video-play-section.tsx     # 播放区域（含图片轮播组件：相册式左右平移轨道（鼠标/触摸拖动+循环）、预加载窗口（前后2张图片+实况视频数据）、播放模式切换（循环/单次/自动连播）、底部图片进度条（始终显示，控制栏 0fr↔1fr 水托荷叶动画）、音量控制、中心蒙版动画、PC单击+移动端双击暂停；缩放 0.5-5 倍（滚轮/双击/捏合/按钮/键盘，scale>1 拖动=平移）+ 缩放中暂停自动轮播；移动端系统返回键重置缩放（popstate+pushState 标记）；全屏返回降级/进出复位轨道状态；横屏播放器高度自适应（max-height calc(max(240px,100dvh-5.5rem))）；滑动切换阈值 1/5 页宽；全屏进度条左右收窄 clamp(16px,6vw,48px)；手动切实况图不置 userInteracted 立即播放；实况 canvas 绘制像素总预算 400 万；CollapsibleDescription 描述折叠组件（超 1.5 行折叠：第一行完整+第二行按字符量截断（非垂直腰斩），截断点后同一行接"···"+"展开"按钮，展开后末尾内联"折叠"按钮，Range.getClientRects 行像素测量+二分预留后缀宽度，符号前移截断，resize 重测，切视频按 key 重置））
 │   │       ├── video-like-button.tsx      # 点赞按钮（乐观更新，即时响应）
@@ -639,6 +640,7 @@ sudo firewall-cmd --reload
 42. **emoji 选择面板滚动行为修复** — `src/components/ui/emoji-picker.tsx` 面板内部滚动（滚轮/拖动滚动条）不再关闭面板；页面级滚动、失焦仍自动关闭面板
 43. **抖音 emoji 雪碧图（两张）** — 214 个表情拆成两张雪碧图：`public/emoji/douyin-sprite-a.webp`（前 64 个，20 列 × 4 行，约 161KB）与 `douyin-sprite-b.webp`（其余 150 个，20 列 × 8 行，约 368KB），每格 96px，按需加载（214 次请求减为最多 2 次）；新增 `src/lib/douyin-sprite.ts`（按 code→序号映射计算格子位置，导出 HTML 与 React style 两种渲染方式）；渲染用「透明 1×1 gif 的 `<img>`」承载（contentEditable 里 Backspace/Delete 可直接删除，空 span 不行）；背景尺寸/定位用**像素整数**（格子边长整数倍，避免小尺寸/非整数缩放下亚像素锯齿）；`scripts/gen-douyin-sprite.py`（需 PIL）生成时**逐格字节校验**（不带 mask 粘贴防止半透明边缘被背景混合变暗），顺序与 `src/lib/douyin-emoji-data.ts` 的 `DOUYIN_EMOJI_LIST` 一致
 44. **图文投稿默认轮播时长改为手动 3 秒** — `src/components/upload/image-text-upload.tsx` 轮播时长默认从"自动"改为"手动 3 秒"
+45. **封面图文角标** — 新增 `src/components/video/post-type-badge.tsx`，在首页视频卡片与播放页「相关推荐」封面左下角显示半透明「图文」小标（多图图标 + 文字，`bg-black/45` + `backdrop-blur`，`pointer-events-none` 不挡点击），仅 `postType === "image_text"` 渲染；`VideoWithAuthor` 增加 `postType` 字段（列表/推荐接口原本已返回）；搜索结果页复用 VideoCard 同样生效
 
 ### 图文播放器交互增强（本次会话）
 - **高斯模糊背景调亮** — 视频背景 `brightness(0.5)→0.9, opacity 0.85→1`；图文背景 `opacity-80→100, brightness-0.5→0.9`，消除偏暗

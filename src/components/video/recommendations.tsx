@@ -7,11 +7,13 @@ import { cachedFetch } from "@/lib/fetch-cache";
 import { setAutoPlayVideo } from "@/lib/signals";
 import { avatarColorFor } from "@/lib/avatar";
 import EmojiText from "@/components/ui/emoji-text";
+import PostTypeBadge from "@/components/video/post-type-badge";
 
 interface Video {
   id: string;
   title: string;
   coverUrl: string | null;
+  postType?: string | null;
   author: { id: string; name: string };
 }
 
@@ -50,7 +52,7 @@ export default function Recommendations({ currentVideoId }: { currentVideoId: st
           transition={{ duration: 0.3, delay: index * 0.08 }}
           className="flex gap-2 rounded-lg p-1 -m-1 transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-800"
         >
-          <div className="h-20 w-32 flex-shrink-0 overflow-hidden rounded bg-zinc-200 dark:bg-zinc-800">
+          <div className="relative h-20 w-32 flex-shrink-0 overflow-hidden rounded bg-zinc-200 dark:bg-zinc-800">
             {v.coverUrl ? (
               <img src={optimizedCover(v.coverUrl, 400)} alt="" width={128} height={72} loading="lazy" decoding="async" className="h-full w-full object-cover" />
             ) : (
@@ -58,6 +60,7 @@ export default function Recommendations({ currentVideoId }: { currentVideoId: st
                 无封面
               </div>
             )}
+            <PostTypeBadge postType={v.postType} />
           </div>
           <div className="min-w-0 flex-1">
             <h3 className="line-clamp-2 text-sm font-medium text-zinc-900 dark:text-zinc-100">

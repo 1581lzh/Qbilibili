@@ -7,11 +7,13 @@ import { motion } from "framer-motion";
 import { setAutoPlayVideo } from "@/lib/signals";
 import { avatarColorFor } from "@/lib/avatar";
 import EmojiText from "@/components/ui/emoji-text";
+import PostTypeBadge from "@/components/video/post-type-badge";
 
 interface Video {
   id: string;
   title: string;
   coverUrl: string;
+  postType?: string | null;
   author: { id: string; name: string };
   _count: { likes: number; favorites: number };
 }
@@ -38,7 +40,7 @@ export default function VideoCard({
         href={`/video/${video.id}`}
         onClick={() => setAutoPlayVideo(video.id)}
       >
-        <div className="aspect-video overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800">
+        <div className="relative aspect-video overflow-hidden rounded-lg bg-zinc-200 dark:bg-zinc-800">
           <Image
             src={video.coverUrl}
             alt={video.title}
@@ -49,6 +51,7 @@ export default function VideoCard({
             className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
             sizes="(max-width: 640px) 50vw, (max-width: 768px) 33vw, (max-width: 1024px) 25vw, 20vw"
           />
+          <PostTypeBadge postType={video.postType} />
         </div>
         <div className="mt-2 flex gap-2">
           <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white ${avatarColor}`}>
