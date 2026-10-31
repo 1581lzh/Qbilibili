@@ -110,6 +110,7 @@ function ImageCarousel({ imageUrls, livePhotoVideos, livePhotoAudio, musicUrls, 
   // 弹层（音量条/模式提示）置于控制栏 overflow-hidden 之外，用按钮实际位置做绝对定位，避免被裁切
   const modeBtnRef = useRef<HTMLButtonElement>(null);
   const volBtnRef = useRef<HTMLButtonElement>(null);
+  const volPopupRef = useRef<HTMLDivElement>(null);
   const [modePopupPos, setModePopupPos] = useState<{ right: number; bottom: number } | null>(null);
   const [volPopupPos, setVolPopupPos] = useState<{ right: number; bottom: number } | null>(null);
   const [showControls, setShowControls] = useState(() => {
@@ -1024,6 +1025,44 @@ function ImageCarousel({ imageUrls, livePhotoVideos, livePhotoAudio, musicUrls, 
   }, []);
   useEffect(() => () => { if (volumeTimerRef.current) clearTimeout(volumeTimerRef.current); if (volumePersistTimerRef.current) clearTimeout(volumePersistTimerRef.current); }, []);
 
+  // 滚轮调音量：指针在音量图标或音量条上时，每次滚动 5%；
+  // 向上滚顺带解除静音，向下滚保留当前静音状态。
+  // 用原生非 passive 监听才能 preventDefault（阻止页面滚动）并 stopPropagation（阻止触发图片缩放）。
+  const adjustVolumeByWheel = useCallback((deltaY: number, overPopup: boolean) => {
+    const dir = deltaY < 0 ? 1 : -1;
+    const nextVolume = Math.min(1, Math.max(0, volumeRef.current + dir * 0.05));
+    // 向上滚解除静音；向下滚保留当前静音状态
+    const nextMuted = dir > 0 ? false : mutedRef.current;
+    volumeRef.current = nextVolume;
+    mutedRef.current = nextMuted;
+    setVolume(nextVolume);
+    setMuted(nextMuted);
+    // 滚图标时让音量条临时出现；已在弹层内滚动则保持常显
+    if (overPopup) keepVolumeVisible();
+    else showVolumeTemporarily();
+    // 与拖动滑块一致：防抖 300ms 再写数据库，避免连续滚动产生大量请求
+    if (volumePersistTimerRef.current) clearTimeout(volumePersistTimerRef.current);
+    volumePersistTimerRef.current = setTimeout(() => {
+      updateVolume({ volume: nextVolume, muted: nextMuted }, userIdRef.current);
+    }, 300);
+  }, [keepVolumeVisible, showVolumeTemporarily]);
+
+  useEffect(() => {
+    const targets: HTMLElement[] = [];
+    if (volBtnRef.current) targets.push(volBtnRef.current);
+    if (volPopupRef.current) targets.push(volPopupRef.current);
+    if (targets.length === 0) return;
+    const onWheel = (e: WheelEvent) => {
+      if (e.deltaY === 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      adjustVolumeByWheel(e.deltaY, e.currentTarget === volPopupRef.current);
+    };
+    targets.forEach((t) => t.addEventListener("wheel", onWheel, { passive: false }));
+    return () => targets.forEach((t) => t.removeEventListener("wheel", onWheel));
+    // volPopupPos：弹层要等 showVolume 后的定位 effect 才真正挂载，必须等它出现再绑定
+  }, [showVolume, volPopupPos, adjustVolumeByWheel]);
+
   // 音量条/模式提示弹层：控制栏 grid 0fr↔1fr 动画需要 overflow-hidden 裁切，会把弹层一起裁掉。
   // 弹层改为基于按钮实际位置（相对播放器容器）的绝对定位，渲染在裁切层之外。
   useLayoutEffect(() => {
@@ -1741,6 +1780,7 @@ function ImageCarousel({ imageUrls, livePhotoVideos, livePhotoAudio, musicUrls, 
             )}
             {showVolume && volPopupPos && (
               <div
+                ref={volPopupRef}
                 data-volume-popup
                 onMouseEnter={keepVolumeVisible}
                 onMouseLeave={() => { setShowVolume(false); if (volumeTimerRef.current) { clearTimeout(volumeTimerRef.current); volumeTimerRef.current = null; } }}

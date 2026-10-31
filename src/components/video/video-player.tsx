@@ -251,6 +251,9 @@ export default function VideoPlayer({
 
   // ---- 与图文播放器共享音量状态（DB 持久化，双向同步）----
   const lastVolumeStateRef = useRef<VolumeState>(getSavedVolume(userId));
+  // 滚轮调音量的持久化防抖
+  const volumeWheelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (volumeWheelTimerRef.current) clearTimeout(volumeWheelTimerRef.current); }, []);
 
   const applyVolumeToPlayer = useCallback((player: any, state: VolumeState) => {
     if (!player) return;
@@ -336,6 +339,8 @@ export default function VideoPlayer({
     let clickHandler: ((e: Event) => void) | null = null;
     let touchHandler: ((e: Event) => void) | null = null;
     let cleanupContainer: HTMLElement | null = null;
+    let volumeWheelContainer: HTMLElement | null = null;
+    let volumeWheelHandler: ((e: WheelEvent) => void) | null = null;
     let blurInterval: ReturnType<typeof setInterval> | null = null;
     let blurResizeHandler: (() => void) | null = null;
 
@@ -578,6 +583,48 @@ export default function VideoPlayer({
         setTimeout(setupBlurBackground, 800);
 
         aliPlayerRef.current = player;
+
+        // 音量滚轮：指针落在音量图标（.prism-volume）或音量条（.prism-volume-control）上时，
+        // 每次滚动调整 5%。事件委托到播放器容器，控件被 Aliplayer 重建后依然有效。
+        // 必须用非 passive 原生监听：preventDefault 阻止页面滚动，stopPropagation 避免触发其他滚轮行为。
+        volumeWheelContainer = containerRef.current;
+        if (volumeWheelContainer) {
+          volumeWheelHandler = (e: WheelEvent) => {
+            const target = e.target as HTMLElement | null;
+            if (!target || !target.closest(".prism-volume, .prism-volume-control")) return;
+            if (e.deltaY === 0) return;
+            e.preventDefault();
+            e.stopPropagation();
+
+            let curVolume = lastVolumeStateRef.current.volume;
+            try {
+              const v = typeof player.getVolume === "function" ? Number(player.getVolume()) : NaN;
+              if (isFinite(v)) curVolume = Math.min(1, Math.max(0, v));
+              else if (player.tag && isFinite(player.tag.volume)) curVolume = Math.min(1, Math.max(0, player.tag.volume));
+            } catch {}
+
+            const prev = lastVolumeStateRef.current;
+            const wasMuted = !!(player.tag && player.tag.muted);
+            const dir = e.deltaY < 0 ? 1 : -1;
+            // 静音时向上滚：从静音前的音量继续加，并解除静音
+            const base = wasMuted ? prev.volume : curVolume;
+            const nextVolume = Math.min(1, Math.max(0, base + dir * 0.05));
+            const nextMuted = dir > 0 ? false : wasMuted;
+
+            try {
+              if (player.tag) player.tag.muted = nextMuted;
+              player.setVolume(nextVolume);
+            } catch {}
+
+            lastVolumeStateRef.current = { volume: nextVolume, muted: nextMuted };
+            // 连续滚动防抖 300ms 再写数据库，避免大量请求
+            if (volumeWheelTimerRef.current) clearTimeout(volumeWheelTimerRef.current);
+            volumeWheelTimerRef.current = setTimeout(() => {
+              updateVolume({ volume: nextVolume, muted: nextMuted }, userIdRef.current);
+            }, 300);
+          };
+          volumeWheelContainer.addEventListener("wheel", volumeWheelHandler, { passive: false });
+        }
       } catch (err) { console.error("Aliplayer init failed:", err); }
     };
 
@@ -588,6 +635,7 @@ export default function VideoPlayer({
       if (blurResizeHandler) window.removeEventListener("resize", blurResizeHandler);
       if (cleanupContainer && clickHandler) cleanupContainer.removeEventListener("click", clickHandler);
       if (cleanupContainer && touchHandler) cleanupContainer.removeEventListener("touchend", touchHandler as EventListener);
+      if (volumeWheelContainer && volumeWheelHandler) volumeWheelContainer.removeEventListener("wheel", volumeWheelHandler);
       if (aliPlayerRef.current) { try { aliPlayerRef.current.dispose(); } catch {} aliPlayerRef.current = null; }
     };
   }, [initialVideo.id, initialVideo.vodVideoId, initialVideo.videoUrl]);
